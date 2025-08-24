@@ -137,7 +137,11 @@
   </div>
 
 <script>
-const DELIVERY = { byZone: { city: 200, suburb: 350, far: 500 }, freeFrom: 4000, defaultZone: 'city' };
+const DELIVERY = { 
+  byZone: { city: 200, suburb: 350, far: 500 }, 
+  freeFrom: 4000, 
+  defaultZone: 'city' 
+};
 let PRODUCTS = [];
 fetch('./products.json').then(r => r.json()).then(list => { PRODUCTS = list; init(); })
   .catch(_ => { PRODUCTS = []; init(); });
@@ -145,26 +149,28 @@ fetch('./products.json').then(r => r.json()).then(list => { PRODUCTS = list; ini
 const tg = window.Telegram?.WebApp; if (tg) tg.expand();
 const cart = JSON.parse(sessionStorage.getItem('cart')||'{}');
 
-// --- helpers ---
 function save(){ sessionStorage.setItem('cart', JSON.stringify(cart)); }
 function formatPrice(n){ return n.toLocaleString('ru-RU') + ' ₽'; }
 
-// --- Яндекс адрес: состояние валидации ---
+// --- Яндекс адрес: состояние ---
 let addressValid = false;
 let lastGeocodedAddress = "";
-
-// обёртка для геокодинга с Promise
 function geocodeValidate(address){
   return new Promise((resolve)=>{
     if (!window.ymaps || !address) return resolve(false);
     ymaps.geocode(address, { results: 1 }).then(res=>{
-      const ok = res && res.geoObjects && res.geoObjects.getLength() > 0;
-      if (ok){
-        lastGeocodedAddress = res.geoObjects.get(0).getAddressLine
-          ? res.geoObjects.get(0).getAddressLine()
-          : address;
+      if (res.geoObjects.getLength() > 0){
+        const obj = res.geoObjects.get(0);
+        const line = obj.getAddressLine();
+        const parts = obj.getLocalities().join(' ') + " " + obj.getAdministrativeAreas().join(' ');
+        // разрешаем только Тюмень и Тюменский район
+        const allowed = /Тюмень/i.test(parts) || /Тюменск/i.test(parts);
+        if (allowed){
+          lastGeocodedAddress = line;
+          return resolve(true);
+        }
       }
-      resolve(ok);
+      resolve(false);
     }).catch(()=> resolve(false));
   });
 }
@@ -173,8 +179,9 @@ function init(){
   document.getElementById('goCheckout').onclick = showCheckout;
   document.getElementById('backToCatalog').onclick = showCatalog;
   document.getElementById('sendOrder').onclick = sendOrder;
+  document.getElementById('sortSel').addEventListener('change', renderCatalog);
 
-  // Чекбокс "Получатель = Заказчик"
+  // Чекбокс «Получатель = Заказчик»
   document.getElementById('samePerson').addEventListener('change', e=>{
     if(e.target.checked){
       document.getElementById('recipientName').value=document.getElementById('customerName').value;
@@ -185,7 +192,7 @@ function init(){
     }
   });
 
-  // Показ/скрытие адреса при смене способа получения
+  // адрес
   const methodSel = document.getElementById('deliveryMethod');
   const addrWrap  = document.getElementById('addrWrap');
   methodSel.addEventListener('change', ()=>{
@@ -193,13 +200,10 @@ function init(){
     else addrWrap.classList.add('hidden');
     renderCheckout();
   });
-  if (methodSel.value === 'delivery') addrWrap.classList.remove('hidden'); else addrWrap.classList.add('hidden');
 
-  // Яндекс-подсказки + валидация адреса
   if (window.ymaps) {
     ymaps.ready(()=>{
       const suggest = new ymaps.SuggestView('address');
-      // при выборе из подсказки — пробуем геокодировать и подтвердить адрес
       suggest.events.add('select', async (e)=>{
         const val = e.get('item')?.value || document.getElementById('address').value;
         addressValid = await geocodeValidate(val);
@@ -207,15 +211,7 @@ function init(){
       });
     });
   }
-  // если пользователь начал печатать руками — сбрасываем флаг валидности
-  const addrInput = document.getElementById('address');
-  addrInput.addEventListener('input', ()=>{ addressValid = false; });
-  addrInput.addEventListener('blur', async ()=>{
-    if (addrInput.value && !addressValid){
-      addressValid = await geocodeValidate(addrInput.value);
-      if (addressValid) addrInput.value = lastGeocodedAddress || addrInput.value;
-    }
-  });
+  document.getElementById('address').addEventListener('input', ()=>{ addressValid=false; });
 
   renderCatalog();
   renderCheckout();
@@ -224,6 +220,17 @@ function init(){
 function renderCatalog(){
   const grid = document.getElementById('grid');
   let list = PRODUCTS.slice();
+  const sortSel = document.getElementById('sortSel')?.value || 'default';
+
+  // сортировка
+  list.sort((a,b)=>{
+    const pa = Number(a.price.toString().replace(/\D/g,''))||0;
+    const pb = Number(b.price.toString().replace(/\D/g,''))||0;
+    if (sortSel==='asc') return pa-pb;
+    if (sortSel==='desc') return pb-pa;
+    return 0;
+  });
+
   grid.innerHTML = '';
   list.forEach(p=>{
     const qty = cart[p.id]||0;
@@ -233,7 +240,7 @@ function renderCatalog(){
       <div class="imgbox"><img src="./images/${p.img}" alt=""></div>
       <div class="info">
         <div class="title">${p.title}</div>
-        <div class="price">${formatPrice(p.price)}</div>
+        <div class="price">${formatPrice(Number(p.price.toString().replace(/\D/g,'')))}</div>
         <div class="controls"><button class="btn add" data-id="${p.id}">В корзину ${qty>0?`<span class="pill">${qty}</span>`:''}</button></div>
       </div>`;
     el.querySelector('.add').onclick = e=>{
@@ -250,74 +257,59 @@ function renderCatalog(){
 function buildPayload(){
   const items = Object.entries(cart).map(([id,qty])=>{
     const p = PRODUCTS.find(x=>x.id===id);
-    return {id,title:p.title,price:p.price,qty,amount:p.price*qty};
+    const priceNum = Number(p.price.toString().replace(/\D/g,''))||0;
+    return {id,title:p.title,price:priceNum,qty,amount:priceNum*qty};
   });
   const total = items.reduce((s,i)=>s+i.amount,0);
   return {items,total};
 }
 
-// Бесплатно от 4000 ₽
 function calcDelivery(subtotal){
   const method = document.getElementById('deliveryMethod').value;
-  if (method === 'pickup') return 0;
-  if (subtotal >= DELIVERY.freeFrom) return 0; // бесплатная доставка
-  // можно развить по зонам, сейчас плоская городская цена:
+  if (method==='pickup') return 0;
+  if (subtotal >= DELIVERY.freeFrom) return 0;
   return DELIVERY.byZone.city;
 }
 
 function renderCheckout(){
   const payload = buildPayload();
+  document.getElementById('cartCount').textContent = payload.items.length+" товар(а)";
 
-  const countEl = document.getElementById('cartCount');
-  if (countEl) countEl.textContent = payload.items.length + " товар(а)";
-
-  const listEl = document.getElementById('orderList');
-  if (listEl) {
-    listEl.innerHTML = payload.items.map(i=>`
-      <div class="row">
-        <div style="flex:1">${i.title}</div>
-        <div class="qtyline">
-          <button class="qbtn" data-id="${i.id}" data-act="dec">−</button>
-          <span class="count">${i.qty}</span>
-          <button class="qbtn" data-id="${i.id}" data-act="inc">+</button>
-        </div>
-        <div style="min-width:90px;text-align:right">${formatPrice(i.amount)}</div>
-      </div>`).join("");
-
-    listEl.querySelectorAll('.qbtn').forEach(btn=>{
-      btn.addEventListener('click',(e)=>{
-        const id=e.currentTarget.dataset.id;
-        const act=e.currentTarget.dataset.act;
-        if (act==='inc') cart[id]=(cart[id]||0)+1;
-        else { if ((cart[id]||0)>1) cart[id]-=1; else delete cart[id]; }
-        save();
-        renderCheckout();
-      });
+  const listEl=document.getElementById('orderList');
+  listEl.innerHTML=payload.items.map(i=>`
+    <div class="row">
+      <div style="flex:1">${i.title}</div>
+      <div class="qtyline">
+        <button class="qbtn" data-id="${i.id}" data-act="dec">−</button>
+        <span class="count">${i.qty}</span>
+        <button class="qbtn" data-id="${i.id}" data-act="inc">+</button>
+      </div>
+      <div style="min-width:90px;text-align:right">${formatPrice(i.amount)}</div>
+    </div>`).join("");
+  listEl.querySelectorAll('.qbtn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const id=e.currentTarget.dataset.id;
+      const act=e.currentTarget.dataset.act;
+      if(act==='inc') cart[id]=(cart[id]||0)+1;
+      else { if((cart[id]||0)>1) cart[id]-=1; else delete cart[id]; }
+      save(); renderCheckout();
     });
-  }
+  });
 
-  const subtotal = payload.total;
-  const fee = calcDelivery(subtotal);
-  const total = subtotal + fee;
+  const subtotal=payload.total;
+  const fee=calcDelivery(subtotal);
+  const total=subtotal+fee;
 
-  const st = document.getElementById('subtotalText');
-  const ft = document.getElementById('feeText');
-  const tt = document.getElementById('totalText');
-  const method = document.getElementById('deliveryMethod').value;
-
-  if (st) st.textContent = formatPrice(subtotal);
-  if (ft) {
-    if (method==='delivery' && subtotal >= DELIVERY.freeFrom){
-      ft.textContent = `0 ₽ (бесплатно от ${DELIVERY.freeFrom.toLocaleString('ru-RU')} ₽)`;
-    } else {
-      ft.textContent = formatPrice(fee);
-    }
-  }
-  if (tt) tt.textContent = formatPrice(total);
+  document.getElementById('subtotalText').textContent=formatPrice(subtotal);
+  document.getElementById('feeText').textContent = 
+    (document.getElementById('deliveryMethod').value==='delivery' && subtotal>=DELIVERY.freeFrom)
+    ? `0 ₽ (бесплатно от ${DELIVERY.freeFrom.toLocaleString('ru-RU')} ₽)` 
+    : formatPrice(fee);
+  document.getElementById('totalText').textContent=formatPrice(total);
 }
 
 function showCheckout(){
-  if (Object.keys(cart).length===0) { alert("Корзина пуста"); return; }
+  if(Object.keys(cart).length===0) return alert("Корзина пуста");
   document.getElementById('view-catalog').classList.remove('active');
   document.getElementById('view-checkout').classList.add('active');
   renderCheckout();
@@ -328,17 +320,17 @@ function showCatalog(){
   document.getElementById('view-catalog').classList.add('active');
 }
 
-// ОТПРАВКА
+// --- отправка ---
 async function sendOrder(){
-  const payload = buildPayload();
-  if (!payload.items.length) return alert("Корзина пуста");
+  const payload=buildPayload();
+  if(!payload.items.length) return alert("Корзина пуста");
 
-  const method = document.getElementById('deliveryMethod').value;
-  const fee    = calcDelivery(payload.total);
+  const method=document.getElementById('deliveryMethod').value;
+  const fee=calcDelivery(payload.total);
 
-  const samePerson = document.getElementById('samePerson').checked;
+  const samePerson=document.getElementById('samePerson').checked;
 
-  const form = {
+  const form={
     customerName: document.getElementById('customerName').value.trim(),
     customerPhone: document.getElementById('customerPhone').value.trim(),
     recipientName: document.getElementById('recipientName').value.trim(),
@@ -350,72 +342,74 @@ async function sendOrder(){
     pickupPoint: document.getElementById('pickupPoint').value
   };
 
-  // Обязательные поля
-  if (!form.customerName) return alert("Укажите имя заказчика");
-  if (!form.customerPhone) return alert("Укажите телефон заказчика");
-  if (!form.date) return alert("Укажите дату");
-  if (!form.time) return alert("Укажите время");
+  if(!form.customerName) return alert("Укажите имя заказчика");
+  if(!form.customerPhone) return alert("Укажите телефон заказчика");
+  if(!form.date) return alert("Укажите дату");
+  if(!form.time) return alert("Укажите время");
 
-  // Получатель: если чекбокс снят — требуем поля получателя
-  if (!samePerson) {
-    if (!form.recipientName) return alert("Укажите имя получателя");
-    if (!form.recipientPhone) return alert("Укажите телефон получателя");
+  if(!samePerson){
+    if(!form.recipientName) return alert("Укажите имя получателя");
+    if(!form.recipientPhone) return alert("Укажите телефон получателя");
   } else {
-    // копируем данные заказчика
-    form.recipientName = form.customerName;
-    form.recipientPhone = form.customerPhone;
+    form.recipientName=form.customerName;
+    form.recipientPhone=form.customerPhone;
   }
 
-  // Адрес обязателен для доставки и должен пройти геокодирование
-  if (method==='delivery') {
-    if (!form.address) return alert("Укажите адрес доставки");
-    // если адрес ещё не валидирован — валидируем сейчас
-    if (!addressValid) {
+  if(method==='delivery'){
+    if(!form.address) return alert("Укажите адрес доставки");
+    if(!addressValid){
       addressValid = await geocodeValidate(form.address);
-      if (addressValid) {
-        form.address = lastGeocodedAddress || form.address;
-        document.getElementById('address').value = form.address;
-      }
+      if(addressValid) form.address = lastGeocodedAddress||form.address;
     }
-    if (!addressValid) return alert("Подтвердите адрес из подсказки Яндекс или введите корректный адрес");
+    if(!addressValid) return alert("Адрес должен быть в пределах г. Тюмень или Тюменского района");
   }
 
-  // Нельзя прошедшую дату/время и меньше чем через 2 часа
-  const now = new Date();
-  const chosen = new Date(form.date + "T" + form.time);
-  const minTime = new Date(now.getTime() + 2*60*60*1000);
-  if (chosen < minTime) return alert("Время должно быть минимум через 2 часа от текущего");
+  // проверка времени
+  const now=new Date();
+  const chosen=new Date(form.date+"T"+form.time);
+  const minTime=new Date(now.getTime()+2*60*60*1000);
+  if(chosen<minTime) return alert("Время должно быть минимум через 2 часа");
 
-  // items как в Postman
-  const items = payload.items.map(i => ({
-    name: i.title,
-    price: i.price.toLocaleString('ru-RU') + ' ₽',
-    qty: i.qty
+  // ограничение по диапазонам
+  const [hh,mm]=form.time.split(":").map(Number);
+  const mins=hh*60+mm;
+  if(method==='delivery'){
+    const start=9*60+30, end=21*60+30;
+    if(mins<start||mins>end) return alert("Доставка доступна с 09:30 до 21:30");
+  } else {
+    const start=8*60+30, end=21*60;
+    if(mins<start||mins>end) return alert("Самовывоз доступен с 08:30 до 21:00");
+  }
+
+  const items=payload.items.map(i=>({
+    name:i.title,
+    price:i.price.toLocaleString('ru-RU')+' ₽',
+    qty:i.qty
   }));
 
-  const body = {
-    customer: { name: form.customerName, phone: form.customerPhone },
-    recipient: { name: form.recipientName, phone: form.recipientPhone },
-    deliveryMethod: method,
-    pickupPoint: form.pickupPoint,
-    address: form.address,
-    date: form.date,
-    time: form.time,
-    comment: form.comment,
+  const body={
+    customer:{ name:form.customerName, phone:form.customerPhone },
+    recipient:{ name:form.recipientName, phone:form.recipientPhone },
+    deliveryMethod:method,
+    pickupPoint:form.pickupPoint,
+    address:form.address,
+    date:form.date,
+    time:form.time,
+    comment:form.comment,
     items,
-    source: 'Мини-приложение',
-    total: payload.total,
+    source:'Мини-приложение',
+    total:payload.total,
     fee,
-    timePlaced: new Date().toISOString()
+    timePlaced:new Date().toISOString()
   };
 
-  const resp = await fetch('/api/sendOrder',{
+  const resp=await fetch('/api/sendOrder',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
-  const json = await resp.json().catch(()=>({}));
-  if(resp.ok && json.ok){
+  const json=await resp.json().catch(()=>({}));
+  if(resp.ok&&json.ok){
     alert("Заказ отправлен!");
     for(const k in cart) delete cart[k];
     save();
@@ -425,6 +419,7 @@ async function sendOrder(){
   }
 }
 </script>
+
 
 
 
