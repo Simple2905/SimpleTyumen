@@ -1,58 +1,75 @@
-// functions/sendOrder.js
-exports.handler = async (event) => {
+
+// netlify/functions/sendOrder.js
+const CORS = {
+  "Content-Type": "application/json; charset=utf-8",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization"
+};
+
+export default async (request) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
+  if (request.method !== "POST") {
+    return new Response(JSON.stringify({ ok:false, error:"Use POST" }), { status: 405, headers: CORS });
+  }
+
+  const BOT_TOKEN =
+    process.env.TELEGRAM_BOT_TOKEN ||
+    process.env.BOT_TOKEN;
+
+  // Chats: try specific by pickup point, then default
+  const CHATS = {
+    polevaya: process.env.CHAT_ID_POLEVAYA,
+    burlaki: process.env.CHAT_ID_BURLAKI,
+    delivery: process.env.CHAT_ID_DEFAULT // optional
+  };
+  const DEFAULT_CHAT =
+    process.env.CHAT_ID_DEFAULT ||
+    process.env.CHAT_ID_POLEVAYA; // fallback to your main group
+
+  if (!BOT_TOKEN || !DEFAULT_CHAT) {
+    return new Response(JSON.stringify({ ok:false, error:"Missing env: TELEGRAM_BOT_TOKEN and CHAT_ID_*" }), { status: 500, headers: CORS });
+  }
+
+  let body;
   try {
-    if (event.httpMethod !== 'POST') {
-      return { statusCode: 405, body: 'Method Not Allowed' };
-    }
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ ok:false, error:"Invalid JSON" }), { status: 400, headers: CORS });
+  }
 
-    const token = process.env.TELEGRAM_BOT_TOKEN || process.env.BOT_TOKEN;
-    const chatId = process.env.CHAT_ID_POLEVAYA || process.env.CHAT_ID_DEFAULT;
+  // Expecting fields from your index.html: deliveryMethod, pickupPoint, text
+  const method = String(body.deliveryMethod || "pickup");
+  const pickup = String(body.pickupPoint || "polevaya");
+  const text   = String(body.text || "");
 
-    if (!token || !chatId) {
-      return { statusCode: 500, body: JSON.stringify({ ok: false, error: 'Missing TELEGRAM envs' }) };
-    }
+  if (!text) {
+    return new Response(JSON.stringify({ ok:false, error:"Empty 'text' field" }), { status: 400, headers: CORS });
+  }
 
-    const data = JSON.parse(event.body || '{}');
+  // Choose chat by pickup/delivery
+  const chatId =
+    (method === "pickup" ? (CHATS[pickup] || DEFAULT_CHAT) : (CHATS.delivery || DEFAULT_CHAT));
 
-    // Собери текст уведомления
-    const lines = [
-      '🧾 *Новый заказ*',
-      data.product ? `Товар: ${data.product.name} — ${data.product.price}` : null,
-      data.name ? `Имя: ${data.name}` : null,
-      data.phone ? `Телефон: ${data.phone}` : null,
-      data.comment ? `Комментарий: ${data.comment}` : null,
-      data.address ? `Адрес: ${data.address}` : null,
-      data.source ? `Источник: ${data.source}` : 'Источник: Мини-приложение',
-    ].filter(Boolean);
-
-    const text = lines.join('\n');
-
-    // Отправка в Telegram (Node 18+ — глобальный fetch есть у Netlify)
-    const tgResp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+  try {
+    const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
         text,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
-      }),
+        parse_mode: "HTML",
+        disable_web_page_preview: true
+      })
     });
-
-    const tgJson = await tgResp.json();
-
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({ ok: true, telegram: tgJson }),
-    };
-  } catch (err) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ ok: false, error: err.message }),
-    };
+    const tg = await resp.json().catch(()=>({}));
+    if (!tg.ok) {
+      return new Response(JSON.stringify({ ok:false, error:"Telegram API error", details: tg }), { status: 502, headers: CORS });
+    }
+    return new Response(JSON.stringify({ ok:true }), { status: 200, headers: CORS });
+  } catch (e) {
+    return new Response(JSON.stringify({ ok:false, error: String(e) }), { status: 500, headers: CORS });
   }
 };
