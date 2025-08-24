@@ -1,36 +1,11 @@
 // netlify/functions/sendorder.js
-const rub = (n) => (Number.isNaN(n) ? '' : new Intl.NumberFormat('ru-RU').format(n) + ' ₽');
-const parsePrice = (s) => Number((s || '').replace(/[^\d.,]/g, '').replace(',', '.')) || NaN;
-const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const line = (label, value) => (value ? `<b>${label}:</b> ${esc(value)}\n` : '');
 
-function parseBody(event) {
-  const raw = event.body || '';
-  const ct = (event.headers?.['content-type'] || event.headers?.['Content-Type'] || '').toLowerCase();
+const esc = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;');
 
-  // Netlify иногда присылает base64 при определённых прокси-конфигурациях
-  const decoded = event.isBase64Encoded ? Buffer.from(raw, 'base64').toString('utf8') : raw;
-
-  // JSON
-  if (ct.includes('application/json')) {
-    try { return JSON.parse(decoded || '{}'); } catch (_) { /* fallthrough */ }
-  }
-
-  // form-urlencoded
-  if (ct.includes('application/x-www-form-urlencoded')) {
-    const obj = {};
-    decoded.split('&').forEach(pair => {
-      const [k, v] = pair.split('=');
-      if (!k) return;
-      obj[decodeURIComponent(k)] = decodeURIComponent((v || '').replace(/\+/g, ' '));
-    });
-    return obj;
-  }
-
-  // Попытка как JSON без заголовка
-  try { return JSON.parse(decoded || '{}'); } catch (_) { /* пусто */ }
-  return {};
-}
+const rub = (n) => new Intl.NumberFormat('ru-RU').format(n) + ' ₽';
 
 exports.handler = async (event) => {
   try {
@@ -44,88 +19,71 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ ok:false, error:'Missing TELEGRAM envs' }) };
     }
 
-    const data = parseBody(event);
+    const data = JSON.parse(event.body || '{}');
 
-    // ---- Нормализация ----
-    const name     = data.name?.trim();
-    const phone    = data.phone?.trim();
-    const address  = data.address?.trim();
-    const comment  = data.comment?.trim();
-    const source   = (data.source || 'Мини-приложение').trim();
-    const placedAt = data.time ? new Date(data.time) : new Date();
-    const orderId  = (data.orderId || Math.random().toString(36).slice(2, 8)).toUpperCase();
+    // --- поля покупателя ---
+    const name    = data.name?.trim();
+    const phone   = data.phone?.trim();
+    const address = data.address?.trim();
+    const comment = data.comment?.trim();
+    const date    = data.date;
+    const time    = data.time;
+    const source  = data.source || 'Мини-приложение';
+    const orderId = (data.orderId || Math.random().toString(36).slice(2, 8)).toUpperCase();
 
-    // ---- Товары ----
-    let lines = [];
+    // --- товары ---
+    const items = Array.isArray(data.items) ? data.items : [];
     let total = 0;
+    const lines = items.map(it => {
+      const qty = it.qty || 1;
+      const price = parseFloat(String(it.price).replace(/[^\d]/g,'')) || 0;
+      const sum = price * qty;
+      total += sum;
+      return `• ${esc(it.name)} — ${qty} × ${rub(price)} = <b>${rub(sum)}</b>`;
+    });
 
-    // одиночный товар
-    if (data.product && (data.product.name || data.product.price)) {
-      const qty = Number(data.product.qty || 1);
-      const pn  = parsePrice(data.product.price || '');
-      const sum = Number.isNaN(pn) ? NaN : pn * qty;
-      if (!Number.isNaN(sum)) total += sum;
-      lines.push(`• ${esc(data.product.name || 'Товар')} — ${esc(data.product.price || '')}${qty > 1 ? ` × ${qty} = <b>${rub(sum)}</b>` : ''}`);
-    }
+    const fee   = data.fee || 0;
+    const grand = total + fee;
 
-    // корзина
-    if (Array.isArray(data.items)) {
-      for (const it of data.items) {
-        if (!it) continue;
-        const q = Number(it.qty || 1);
-        const pn = parsePrice(it.price || '');
-        const sum = Number.isNaN(pn) ? NaN : pn * q;
-        if (!Number.isNaN(sum)) total += sum;
-        lines.push(`• ${esc(it.name || 'Товар')} — ${esc(it.price || '')}${q > 1 ? ` × ${q} = <b>${rub(sum)}</b>` : ''}`);
-      }
-    }
-
-    const itemsBlock = lines.length ? `<b>Состав заказа:</b>\n${lines.join('\n')}\n` : '';
-    const totalBlock = total > 0 ? `<b>Итого:</b> ${rub(total)}\n` : '';
-
-    // ---- Диагностика: покажем какие поля реально пришли ----
-    const missing = [];
-    if (!name)    missing.push('name');
-    if (!phone)   missing.push('phone');
-    if (!address) missing.push('address'); // может быть опц.
-    if (!comment) /* опционально */ null;
-    if (!lines.length) missing.push('product/items');
-
-    const diag = missing.length ? `\n⚠️ <i>Отсутствуют поля:</i> ${missing.join(', ')}\n` : '';
-
-    // ---- Сообщение ----
+    // --- сообщение ---
     const text =
 `🧾 <b>Новый заказ</b>
 <b>№</b> ${orderId}
-<b>Время:</b> ${esc(placedAt.toLocaleString('ru-RU'))}
-${itemsBlock}${totalBlock}${line('Имя', name)}${line('Телефон', phone)}${line('Адрес', address)}${line('Комментарий', comment)}${line('Источник', source)}${diag}`;
 
-    // Кнопка "Позвонить" если есть телефон
-    const reply_markup = phone ? {
-      inline_keyboard: [
-        [{ text: `Позвонить: ${phone}`, url: `tel:${phone.replace(/[^\d+]/g,'')}` }]
-      ]
-    } : undefined;
+👤 <b>Имя:</b> ${esc(name)}
+📞 <b>Телефон:</b> ${esc(phone)}
+🏠 <b>Адрес:</b> ${esc(address || (data.deliveryMethod==='pickup' ? 'Самовывоз' : '-'))}
 
-    const tgResp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+📦 <b>Состав заказа:</b>
+${lines.join('\n') || '-'}
+━━━━━━━━━━
+💰 <b>Товары:</b> ${rub(total)}
+🚚 <b>Доставка:</b> ${rub(fee)}
+💳 <b>Итого:</b> ${rub(grand)}
+━━━━━━━━━━
+🕒 <b>Дата/время:</b> ${esc([date, time].filter(Boolean).join(' ') || new Date().toLocaleString('ru-RU'))}
+📝 <b>Комментарий:</b> ${esc(comment || '-')}
+📲 <b>Источник:</b> ${esc(source)}`;
+
+    // --- отправка ---
+    const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
         text,
         parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        reply_markup
-      }),
+        disable_web_page_preview: true
+      })
     });
-    const tgJson = await tgResp.json();
+    const tg = await resp.json();
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ ok: true, telegram: tgJson, received: data }),
+      headers: { 'Content-Type':'application/json','Access-Control-Allow-Origin':'*' },
+      body: JSON.stringify({ ok:true, telegram: tg })
     };
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ ok:false, error: e.message }) };
+    return { statusCode: 500, body: JSON.stringify({ ok:false, error:e.message }) };
   }
 };
