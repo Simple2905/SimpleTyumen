@@ -355,7 +355,7 @@
       if (!form.name) return alert("Укажите имя");
 
       try {
-        const resp = await fetch('/api/sendorder', {
+        const resp = await fetch('/.netlify/functions/sendOrder', {
           method: 'POST',
           headers: { 'Content-Type':'application/json' },
           body: JSON.stringify({
