@@ -165,26 +165,20 @@
 
   <script>
     // === Настройки ===
-    // Стоимости по зонам и порог бесплатной доставки
     const DELIVERY = {
       byZone: { city: 200, suburb: 350, far: 500 },
-      freeFrom: 4000,         // бесплатная доставка от этой суммы
+      freeFrom: 4000,
       defaultZone: 'city'
     };
-
-    // Привязка филиалов к телеграм-аккаунтам
     const BRANCH_TG = {
-      polevaya: "Simple_polevaya", // Самовывоз Полевая, 109с9
-      burlaki: "simple_tyumen",    // Самовывоз Бурлаки, 2ак3
-      delivery: "simple_simple_tmn" // Доставка — общий аккаунт (можно заменить)
+      polevaya: "Simple_polevaya",
+      burlaki: "simple_tyumen",
+      delivery: "simple_simple_tmn"
     };
-
     const LABELS = { top: "ТОП выбор", popular: "Популярно", recommend: "Рекомендуем" };
     let PRODUCTS = [];
-
     fetch('./products.json').then(r => r.json()).then(list => { PRODUCTS = list; init(); })
       .catch(_ => { PRODUCTS = []; init(); });
-
     const tg = window.Telegram?.WebApp; if (tg) tg.expand();
     const cart = JSON.parse(sessionStorage.getItem('cart')||'{}');
     let sortMode = 'default';
@@ -197,11 +191,7 @@
       document.getElementById('backToCatalog').onclick = showCatalog;
       document.getElementById('sendOrder').onclick = sendOrder;
       document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderCatalog(); });
-
-      // Telegram main button → открыть корзину
       if (tg){ tg.onEvent('mainButtonClicked', showCheckout); }
-
-      // Дефолт: Самовывоз (Полевая)
       const methodSel = document.getElementById('deliveryMethod');
       const pickupWrap = document.getElementById('pickupWrap');
       const addrWrap = document.getElementById('addrWrap');
@@ -212,7 +202,6 @@
       pickupSel.value = 'polevaya';
       zoneSel.value = DELIVERY.defaultZone;
       pickupWrap.classList.remove('hidden'); addrWrap.classList.add('hidden'); zoneWrap.classList.add('hidden');
-
       methodSel.addEventListener('change', () => {
         const v = methodSel.value;
         if (v === 'pickup'){
@@ -226,9 +215,7 @@
         }
         renderCheckout();
       });
-
       document.getElementById('zone').addEventListener('change', renderCheckout);
-
       function updateTimer(){
         const deadline=new Date("2025-09-01T00:00:00+03:00").getTime();
         const now=Date.now(); const diff=deadline-now;
@@ -240,7 +227,6 @@
         el.textContent="До 1 сентября: "+d+"д "+h+"ч "+m+"м";
       }
       updateTimer(); const timerInt=setInterval(updateTimer, 60000);
-
       renderCatalog(); updateMainButton();
     }
 
@@ -334,7 +320,6 @@
           : formatPrice(fee);
       document.getElementById('totalText').textContent = formatPrice(total);
 
-      // Пояснение по зоне
       const feeText = document.getElementById('deliveryFeeText');
       const freeNote = document.getElementById('freeNote');
       if (document.getElementById('deliveryMethod').value==='delivery'){
@@ -346,36 +331,21 @@
       }
     }
 
-    function summaryText(payload, form, fee, total){
-      const lines = payload.items.map(i=>`- ${i.title} × ${i.qty} (${i.amount.toLocaleString('ru-RU')} ₽)`);
-      const header = `Новый заказ 🎉`;
-      const way = `📍 Способ получения: ${form.deliveryMethod==='pickup' ? `Самовывоз (${form.pickupHuman})` : `Доставка (${form.zoneHuman})`}`;
-      const person = `👤 Имя: ${form.name}\n📞 Телефон: ${form.phone}`;
-      const order = `📦 Заказ:\n` + lines.join("\n");
-      const subtotal = `\n\nСумма товаров: ${payload.total.toLocaleString('ru-RU')} ₽`;
-      const delivery = `\nДоставка: ${fee.toLocaleString('ru-RU')} ₽`;
-      const grand = `\n\n💰 Итого к оплате: ${total.toLocaleString('ru-RU')} ₽`;
-      const extra = form.deliveryMethod==='pickup'
-        ? ``
-        : `\n🏠 Адрес доставки: ${form.address || '-'}`;
-      const time = (form.date || form.time) ? `\n🕒 Время: ${[form.date, form.time].filter(Boolean).join(' ')}` : '';
-      const comment = form.comment ? `\n📝 Комментарий: “${form.comment}”` : '';
-      return `${header}\n${way}\n${person}\n${order}${subtotal}${delivery}${grand}${extra}${time}${comment}`;
-    }
-
     async function sendOrder(){
       const payload = buildPayload();
       if (!payload.items.length) return alert("Корзина пуста");
+
       const method = document.getElementById('deliveryMethod').value;
       const pickupSel = document.getElementById('pickupPoint');
       const zoneSel = document.getElementById('zone');
       const fee = calcDelivery(payload.total);
       const total = payload.total + fee;
       const zoneMap = { city: "В черте города", suburb: "Пригород", far: "Далёкая зона" };
+
       const form = {
         deliveryMethod: method,
         pickupPoint: pickupSel.value,
-        pickupHuman: pickupSel.selectedOptions[0].textContent,
+        pickupHuman: pickupSel.selectedOptions[0]?.textContent || '',
         zone: zoneSel.value,
         zoneHuman: zoneMap[zoneSel.value],
         address: document.getElementById('address').value.trim(),
@@ -385,17 +355,34 @@
         phone: document.getElementById('phone').value.trim(),
         comment: document.getElementById('comment').value.trim(),
       };
+
       if (!form.phone) return alert("Укажите телефон");
       if (!form.name) return alert("Укажите имя");
 
-      // Куда отправляем
-      const floristLogin = method==='pickup' ? BRANCH_TG[form.pickupPoint] : BRANCH_TG.delivery;
-      const text = summaryText(payload, form, fee, total);
       try {
-        const resp = await fetch('/.netlify/functions/sendOrder', {
+        const resp = await fetch('/api/sendorder', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ deliveryMethod: method, pickupPoint: form.pickupPoint, text })
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({
+            name: form.name,
+            phone: form.phone,
+            address: form.address,
+            comment: form.comment,
+            deliveryMethod: method,
+            pickupPoint: form.pickupPoint,
+            zone: form.zone,
+            date: form.date,
+            time: form.time,
+            items: payload.items.map(i => ({
+              name: i.title,
+              price: i.price.toLocaleString('ru-RU') + ' ₽',
+              qty: i.qty
+            })),
+            source: 'Мини-приложение',
+            total,
+            fee,
+            timePlaced: new Date().toISOString()
+          })
         });
         if (resp.ok) {
           alert('Заказ отправлен! Мы свяжемся с вами для подтверждения.');
