@@ -145,8 +145,29 @@ fetch('./products.json').then(r => r.json()).then(list => { PRODUCTS = list; ini
 const tg = window.Telegram?.WebApp; if (tg) tg.expand();
 const cart = JSON.parse(sessionStorage.getItem('cart')||'{}');
 
+// --- helpers ---
 function save(){ sessionStorage.setItem('cart', JSON.stringify(cart)); }
 function formatPrice(n){ return n.toLocaleString('ru-RU') + ' ₽'; }
+
+// --- Яндекс адрес: состояние валидации ---
+let addressValid = false;
+let lastGeocodedAddress = "";
+
+// обёртка для геокодинга с Promise
+function geocodeValidate(address){
+  return new Promise((resolve)=>{
+    if (!window.ymaps || !address) return resolve(false);
+    ymaps.geocode(address, { results: 1 }).then(res=>{
+      const ok = res && res.geoObjects && res.geoObjects.getLength() > 0;
+      if (ok){
+        lastGeocodedAddress = res.geoObjects.get(0).getAddressLine
+          ? res.geoObjects.get(0).getAddressLine()
+          : address;
+      }
+      resolve(ok);
+    }).catch(()=> resolve(false));
+  });
+}
 
 function init(){
   document.getElementById('goCheckout').onclick = showCheckout;
@@ -172,14 +193,31 @@ function init(){
     else addrWrap.classList.add('hidden');
     renderCheckout();
   });
-  // Стартовое состояние адреса
   if (methodSel.value === 'delivery') addrWrap.classList.remove('hidden'); else addrWrap.classList.add('hidden');
 
-  // Яндекс-подсказки
-  if (window.ymaps) { ymaps.ready(()=>{ new ymaps.SuggestView('address'); }); }
+  // Яндекс-подсказки + валидация адреса
+  if (window.ymaps) {
+    ymaps.ready(()=>{
+      const suggest = new ymaps.SuggestView('address');
+      // при выборе из подсказки — пробуем геокодировать и подтвердить адрес
+      suggest.events.add('select', async (e)=>{
+        const val = e.get('item')?.value || document.getElementById('address').value;
+        addressValid = await geocodeValidate(val);
+        if (addressValid) document.getElementById('address').value = lastGeocodedAddress || val;
+      });
+    });
+  }
+  // если пользователь начал печатать руками — сбрасываем флаг валидности
+  const addrInput = document.getElementById('address');
+  addrInput.addEventListener('input', ()=>{ addressValid = false; });
+  addrInput.addEventListener('blur', async ()=>{
+    if (addrInput.value && !addressValid){
+      addressValid = await geocodeValidate(addrInput.value);
+      if (addressValid) addrInput.value = lastGeocodedAddress || addrInput.value;
+    }
+  });
 
   renderCatalog();
-  // Если на экране уже checkout — подстрахуемся
   renderCheckout();
 }
 
@@ -203,7 +241,6 @@ function renderCatalog(){
       cart[id]=(cart[id]||0)+1;
       save();
       renderCatalog();
-      // если пользователь уже в checkout — обновим суммы
       if (document.getElementById('view-checkout').classList.contains('active')) renderCheckout();
     };
     grid.appendChild(el);
@@ -219,24 +256,21 @@ function buildPayload(){
   return {items,total};
 }
 
-// Рассчёт доставки (простой вариант по городу)
+// Бесплатно от 4000 ₽
 function calcDelivery(subtotal){
   const method = document.getElementById('deliveryMethod').value;
   if (method === 'pickup') return 0;
-  const fee = DELIVERY.byZone.city;
-  if (subtotal >= DELIVERY.freeFrom) return 0;
-  return fee;
+  if (subtotal >= DELIVERY.freeFrom) return 0; // бесплатная доставка
+  // можно развить по зонам, сейчас плоская городская цена:
+  return DELIVERY.byZone.city;
 }
 
-// РЕНДЕР CHECKOUT: список товаров, суммы, +/−
 function renderCheckout(){
   const payload = buildPayload();
 
-  // бейдж с количеством
   const countEl = document.getElementById('cartCount');
   if (countEl) countEl.textContent = payload.items.length + " товар(а)";
 
-  // список позиций
   const listEl = document.getElementById('orderList');
   if (listEl) {
     listEl.innerHTML = payload.items.map(i=>`
@@ -250,7 +284,6 @@ function renderCheckout(){
         <div style="min-width:90px;text-align:right">${formatPrice(i.amount)}</div>
       </div>`).join("");
 
-    // обработчики +/−
     listEl.querySelectorAll('.qbtn').forEach(btn=>{
       btn.addEventListener('click',(e)=>{
         const id=e.currentTarget.dataset.id;
@@ -263,7 +296,6 @@ function renderCheckout(){
     });
   }
 
-  // суммы
   const subtotal = payload.total;
   const fee = calcDelivery(subtotal);
   const total = subtotal + fee;
@@ -271,8 +303,16 @@ function renderCheckout(){
   const st = document.getElementById('subtotalText');
   const ft = document.getElementById('feeText');
   const tt = document.getElementById('totalText');
+  const method = document.getElementById('deliveryMethod').value;
+
   if (st) st.textContent = formatPrice(subtotal);
-  if (ft) ft.textContent = formatPrice(fee);
+  if (ft) {
+    if (method==='delivery' && subtotal >= DELIVERY.freeFrom){
+      ft.textContent = `0 ₽ (бесплатно от ${DELIVERY.freeFrom.toLocaleString('ru-RU')} ₽)`;
+    } else {
+      ft.textContent = formatPrice(fee);
+    }
+  }
   if (tt) tt.textContent = formatPrice(total);
 }
 
@@ -280,7 +320,7 @@ function showCheckout(){
   if (Object.keys(cart).length===0) { alert("Корзина пуста"); return; }
   document.getElementById('view-catalog').classList.remove('active');
   document.getElementById('view-checkout').classList.add('active');
-  renderCheckout(); // <-- важно
+  renderCheckout();
 }
 
 function showCatalog(){
@@ -296,6 +336,8 @@ async function sendOrder(){
   const method = document.getElementById('deliveryMethod').value;
   const fee    = calcDelivery(payload.total);
 
+  const samePerson = document.getElementById('samePerson').checked;
+
   const form = {
     customerName: document.getElementById('customerName').value.trim(),
     customerPhone: document.getElementById('customerPhone').value.trim(),
@@ -308,20 +350,40 @@ async function sendOrder(){
     pickupPoint: document.getElementById('pickupPoint').value
   };
 
-  // Валидации
+  // Обязательные поля
   if (!form.customerName) return alert("Укажите имя заказчика");
   if (!form.customerPhone) return alert("Укажите телефон заказчика");
   if (!form.date) return alert("Укажите дату");
   if (!form.time) return alert("Укажите время");
-  if (method==='delivery' && !form.address) return alert("Укажите адрес доставки");
 
-  // Нельзя прошедшую дату и меньше чем через 2 часа
+  // Получатель: если чекбокс снят — требуем поля получателя
+  if (!samePerson) {
+    if (!form.recipientName) return alert("Укажите имя получателя");
+    if (!form.recipientPhone) return alert("Укажите телефон получателя");
+  } else {
+    // копируем данные заказчика
+    form.recipientName = form.customerName;
+    form.recipientPhone = form.customerPhone;
+  }
+
+  // Адрес обязателен для доставки и должен пройти геокодирование
+  if (method==='delivery') {
+    if (!form.address) return alert("Укажите адрес доставки");
+    // если адрес ещё не валидирован — валидируем сейчас
+    if (!addressValid) {
+      addressValid = await geocodeValidate(form.address);
+      if (addressValid) {
+        form.address = lastGeocodedAddress || form.address;
+        document.getElementById('address').value = form.address;
+      }
+    }
+    if (!addressValid) return alert("Подтвердите адрес из подсказки Яндекс или введите корректный адрес");
+  }
+
+  // Нельзя прошедшую дату/время и меньше чем через 2 часа
   const now = new Date();
   const chosen = new Date(form.date + "T" + form.time);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const chosenDay = new Date(chosen.getFullYear(), chosen.getMonth(), chosen.getDate());
-  if (chosenDay < today) return alert("Нельзя выбрать прошедшую дату");
-  const minTime = new Date(now.getTime() + 2*60*60*1000); // +2 часа
+  const minTime = new Date(now.getTime() + 2*60*60*1000);
   if (chosen < minTime) return alert("Время должно быть минимум через 2 часа от текущего");
 
   // items как в Postman
@@ -333,7 +395,7 @@ async function sendOrder(){
 
   const body = {
     customer: { name: form.customerName, phone: form.customerPhone },
-    recipient: { name: form.recipientName || form.customerName, phone: form.recipientPhone || form.customerPhone },
+    recipient: { name: form.recipientName, phone: form.recipientPhone },
     deliveryMethod: method,
     pickupPoint: form.pickupPoint,
     address: form.address,
@@ -363,6 +425,8 @@ async function sendOrder(){
   }
 }
 </script>
+
+
 
 </body>
 </html>
