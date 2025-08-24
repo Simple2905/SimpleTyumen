@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Коллекция к 1 сентября</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { --pad:16px; --brand:#6b8f52; --muted:#e2e5ea; --shadow:0 8px 24px rgba(0,0,0,.08); }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Arial,Segoe UI,Roboto,sans-serif;background:#f6f7fb;color:#111}
+    header{position:sticky;top:0;background:#fff;z-index:30;box-shadow:var(--shadow)}
+    .strip{padding:10px var(--pad);text-align:center;font-weight:700;color:#fff;
+           background:linear-gradient(90deg,#ef4444,#f97316,#f59e0b,#22c55e,#3b82f6,#8b5cf6);
+           background-size:200% 100%; animation:slide 12s linear infinite;}
+    @keyframes slide{0%{background-position:0% 0}100%{background-position:100% 0}}
+    .head{display:flex;justify-content:space-between;align-items:center;padding:8px var(--pad);}
+    .sub{font-weight:500;opacity:.9}
+    .timer{font-size:14px;color:#d32f2f;font-weight:700}
+    .wrap{max-width:1024px;margin:0 auto;padding:var(--pad)}
+    .view{display:none} .view.active{display:block}
+    .sort{display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+    select{padding:8px 12px;border:1px solid var(--muted);border-radius:10px;background:#fff}
+    .ghost{background:#fff;border:1px solid var(--muted);color:#111;border-radius:12px;padding:10px 12px;cursor:pointer}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    @media(min-width:740px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+    .card{background:#fff;border-radius:20px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;animation:fadeInUp .45s ease both}
+    .imgbox{position:relative;aspect-ratio:3/4;background:#eee;overflow:hidden}
+    .imgbox img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+    .badge{position:absolute;top:10px;left:10px;padding:6px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:700;background:#111;box-shadow:var(--shadow)}
+    .badge.top{background:#ef4444}.badge.popular{background:#22c55e}.badge.recommend{background:#3b82f6}
+    .info{padding:12px}
+    .title{font-weight:600;margin:0 0 6px;line-height:1.25}
+    .price{font-size:15px;margin-bottom:10px;opacity:.9}
+    .controls{display:flex;gap:8px;align-items:center}
+    .btn{flex:1;padding:12px;border-radius:12px;border:none;background:var(--brand);color:#fff;font-weight:600;cursor:pointer}
+    .pill{padding:6px 10px;border-radius:999px;background:#f0f2f6;font-size:12px;margin-left:6px}
+    footer{text-align:center;color:#777;padding:40px 0}
+    @keyframes fadeInUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    /* checkout */
+    .checkout-card{background:#fff;border-radius:20px;box-shadow:var(--shadow);padding:16px}
+    .row{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
+    .hr{height:1px;background:#eee;margin:12px 0}
+    .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .field input,.field textarea,.field select{padding:12px;border:1px solid var(--muted);border-radius:12px;background:#fff}
+    .muted{color:#666;font-size:14px}
+    .total{font-weight:700;font-size:18px}
+    .qtyline{display:flex;gap:8px;align-items:center}
+    .qbtn{width:28px;height:28px;border-radius:8px;border:1px solid var(--muted);background:#fff;cursor:pointer}
+    .count{width:24px;text-align:center;display:inline-block}
+    .hidden{display:none}
+    .note{font-size:12px;color:#666}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="strip">Коллекция к 1 сентября</div>
+    <div class="head">
+      <div class="sub">Дарить цветы — просто 🌸</div>
+      <div id="timer" class="timer"></div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <!-- CATALOG -->
+    <section id="view-catalog" class="view active">
+      <div class="sort">
+        <label for="sortSel">Сортировка:</label>
+        <select id="sortSel">
+          <option value="default">по умолчанию</option>
+          <option value="asc">цена ↑</option>
+          <option value="desc">цена ↓</option>
+        </select>
+        <button id="goCheckout" class="ghost">Перейти в корзину</button>
+      </div>
+      <div id="grid" class="grid"></div>
+    </section>
+
+    <!-- CHECKOUT -->
+    <section id="view-checkout" class="view">
+      <div class="checkout-card">
+        <div class="row">
+          <div><b>Ваш заказ</b> <span class="pill" id="cartCount">0 товаров</span></div>
+          <button id="backToCatalog" class="ghost" style="min-width:120px">Назад</button>
+        </div>
+        <div id="orderList" class="muted"></div>
+        <div class="hr"></div>
+
+        <div class="field">
+          <label>Способ получения</label>
+          <select id="deliveryMethod">
+            <option value="pickup">Самовывоз</option>
+            <option value="delivery">Доставка</option>
+          </select>
+        </div>
+
+        <div id="pickupWrap" class="field">
+          <label>Точка самовывоза</label>
+          <select id="pickupPoint">
+            <option value="polevaya">Полевая, 109с9</option>
+            <option value="burlaki">Бурлаки, 2ак3</option>
+          </select>
+        </div>
+
+        <div id="addrWrap" class="field hidden">
+          <label>Адрес доставки</label>
+          <input id="address" placeholder="г. Тюмень, ул. Примерная, 1" />
+          <div class="note">Доставка по городу Тюмень. Стоимость зависит от зоны и суммы заказа.</div>
+        </div>
+
+        <div id="zoneWrap" class="row hidden">
+          <div class="field" style="flex:1;min-width:220px">
+            <label>Зона доставки</label>
+            <select id="zone">
+              <option value="city">В черте города</option>
+              <option value="suburb">Пригород</option>
+              <option value="far">Далёкая зона</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1;min-width:220px">
+            <label>Стоимость доставки</label>
+            <input id="deliveryFeeText" disabled />
+            <div id="freeNote" class="note"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field" style="flex:1">
+            <label>Дата</label>
+            <input id="date" type="date" />
+          </div>
+          <div class="field" style="flex:1">
+            <label>Время</label>
+            <input id="time" type="time" />
+          </div>
+        </div>
+        <div class="row">
+          <div class="field" style="flex:1">
+            <label>Имя</label>
+            <input id="name" placeholder="Имя получателя" />
+          </div>
+          <div class="field" style="flex:1">
+            <label>Телефон</label>
+            <input id="phone" placeholder="+7 9XX XXX-XX-XX" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Комментарий к заказу</label>
+          <textarea id="comment" rows="3" placeholder="Открытка, домофон, пожелания..."></textarea>
+        </div>
+        <div class="row">
+          <div class="total">
+            Товары: <span id="subtotalText">0 ₽</span><br>
+            Доставка: <span id="feeText">0 ₽</span><br>
+            Итого к оплате: <span id="totalText">0 ₽</span>
+          </div>
+          <button id="sendOrder" class="btn" style="min-width:200px">Отправить заказ</button>
+        </div>
+        <div class="muted" style="margin-top:8px">Онлайн-оплата появится после подключения эквайринга Тинькофф.</div>
+      </div>
+    </section>
+
+    <footer>🕘 Пн–Вс 08:30–21:00 • 🛵 Доставка по Тюмени</footer>
+  </div>
+
+  <script>
+    // === Настройки ===
+    // Стоимости по зонам и порог бесплатной доставки
+    const DELIVERY = {
+      byZone: { city: 200, suburb: 350, far: 500 },
+      freeFrom: 4000,         // бесплатная доставка от этой суммы
+      defaultZone: 'city'
+    };
+
+    // Привязка филиалов к телеграм-аккаунтам
+    const BRANCH_TG = {
+      polevaya: "Simple_polevaya", // Самовывоз Полевая, 109с9
+      burlaki: "simple_tyumen",    // Самовывоз Бурлаки, 2ак3
+      delivery: "simple_simple_tmn" // Доставка — общий аккаунт (можно заменить)
+    };
+
+    const LABELS = { top: "ТОП выбор", popular: "Популярно", recommend: "Рекомендуем" };
+    let PRODUCTS = [];
+
+    fetch('./products.json').then(r => r.json()).then(list => { PRODUCTS = list; init(); })
+      .catch(_ => { PRODUCTS = []; init(); });
+
+    const tg = window.Telegram?.WebApp; if (tg) tg.expand();
+    const cart = JSON.parse(sessionStorage.getItem('cart')||'{}');
+    let sortMode = 'default';
+
+    function save(){ sessionStorage.setItem('cart', JSON.stringify(cart)); }
+    function formatPrice(n){ return n.toLocaleString('ru-RU') + ' ₽'; }
+
+    function init(){
+      document.getElementById('goCheckout').onclick = showCheckout;
+      document.getElementById('backToCatalog').onclick = showCatalog;
+      document.getElementById('sendOrder').onclick = sendOrder;
+      document.getElementById('sortSel').addEventListener('change', e=>{ sortMode=e.target.value; renderCatalog(); });
+
+      // Telegram main button → открыть корзину
+      if (tg){ tg.onEvent('mainButtonClicked', showCheckout); }
+
+      // Дефолт: Самовывоз (Полевая)
+      const methodSel = document.getElementById('deliveryMethod');
+      const pickupWrap = document.getElementById('pickupWrap');
+      const addrWrap = document.getElementById('addrWrap');
+      const zoneWrap = document.getElementById('zoneWrap');
+      const pickupSel = document.getElementById('pickupPoint');
+      const zoneSel = document.getElementById('zone');
+      methodSel.value = 'pickup';
+      pickupSel.value = 'polevaya';
+      zoneSel.value = DELIVERY.defaultZone;
+      pickupWrap.classList.remove('hidden'); addrWrap.classList.add('hidden'); zoneWrap.classList.add('hidden');
+
+      methodSel.addEventListener('change', () => {
+        const v = methodSel.value;
+        if (v === 'pickup'){
+          pickupWrap.classList.remove('hidden');
+          addrWrap.classList.add('hidden');
+          zoneWrap.classList.add('hidden');
+        } else {
+          pickupWrap.classList.add('hidden');
+          addrWrap.classList.remove('hidden');
+          zoneWrap.classList.remove('hidden');
+        }
+        renderCheckout();
+      });
+
+      document.getElementById('zone').addEventListener('change', renderCheckout);
+
+      function updateTimer(){
+        const deadline=new Date("2025-09-01T00:00:00+03:00").getTime();
+        const now=Date.now(); const diff=deadline-now;
+        const el=document.getElementById('timer');
+        if(diff<=0){ el.textContent="🎉 С Днём знаний!"; clearInterval(timerInt); return; }
+        const d=Math.floor(diff/(1000*60*60*24));
+        const h=Math.floor((diff%(1000*60*60*24))/(1000*60*60));
+        const m=Math.floor((diff%(1000*60*60))/(1000*60));
+        el.textContent="До 1 сентября: "+d+"д "+h+"ч "+m+"м";
+      }
+      updateTimer(); const timerInt=setInterval(updateTimer, 60000);
+
+      renderCatalog(); updateMainButton();
+    }
+
+    function renderCatalog(){
+      const grid = document.getElementById('grid');
+      let list = PRODUCTS.slice();
+      if (sortMode==='asc') list.sort((a,b)=>a.price-b.price);
+      if (sortMode==='desc') list.sort((a,b)=>b.price-a.price);
+      grid.innerHTML = '';
+      list.forEach(p=>{
+        const qty = cart[p.id]||0;
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.innerHTML = `
+          <div class="imgbox">
+            ${p.badge ? `<div class="badge ${p.badge}">${LABELS[p.badge]}</div>` : ''}
+            <img src="./images/${p.img}" alt="">
+          </div>
+          <div class="info">
+            <div class="title">${p.title}</div>
+            <div class="price">${formatPrice(p.price)}</div>
+            <div class="controls">
+              <button class="btn add" data-id="${p.id}">В корзину ${qty>0?`<span class="pill">${qty}</span>`:''}</button>
+            </div>
+          </div>`;
+        el.querySelector('.add').onclick = e=>{ const id=e.currentTarget.dataset.id; cart[id]=(cart[id]||0)+1; save(); updateMainButton(); renderCatalog(); };
+        grid.appendChild(el);
+      });
+    }
+
+    function buildPayload(){
+      const items = Object.entries(cart).map(([id,qty])=>{
+        const p = PRODUCTS.find(x=>x.id===id);
+        return {id,title:p.title,price:p.price,qty,amount:p.price*qty};
+      });
+      const total = items.reduce((s,i)=>s+i.amount,0);
+      return {type:'order',items,total};
+    }
+
+    function calcDelivery(subtotal){
+      const method = document.getElementById('deliveryMethod').value;
+      if (method === 'pickup') return 0;
+      const zone = document.getElementById('zone').value;
+      const fee = DELIVERY.byZone[zone] || 0;
+      if (subtotal >= DELIVERY.freeFrom) return 0;
+      return fee;
+    }
+
+    function showCheckout(){
+      if (Object.keys(cart).length===0) { alert("Корзина пуста"); return; }
+      document.getElementById('view-catalog').classList.remove('active');
+      document.getElementById('view-checkout').classList.add('active');
+      renderCheckout();
+    }
+    function showCatalog(){
+      document.getElementById('view-checkout').classList.remove('active');
+      document.getElementById('view-catalog').classList.add('active');
+      renderCatalog();
+    }
+
+    function renderCheckout(){
+      const payload = buildPayload();
+      document.getElementById('cartCount').textContent = payload.items.length + " товар(а)";
+      const listEl = document.getElementById('orderList');
+      listEl.innerHTML = payload.items.map(i=>`
+        <div class="row">
+          <div style="flex:1">${i.title}</div>
+          <div class="qtyline">
+            <button class="qbtn" data-id="${i.id}" data-act="dec">−</button>
+            <span class="count">${i.qty}</span>
+            <button class="qbtn" data-id="${i.id}" data-act="inc">+</button>
+          </div>
+          <div style="min-width:90px;text-align:right">${formatPrice(i.amount)}</div>
+        </div>`).join("");
+      listEl.querySelectorAll('.qbtn').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          const id=e.currentTarget.dataset.id;
+          const act=e.currentTarget.dataset.act;
+          if (act==='inc') cart[id]=(cart[id]||0)+1;
+          else { if ((cart[id]||0)>1) cart[id]-=1; else delete cart[id]; }
+          save(); updateMainButton(); renderCheckout();
+        });
+      });
+
+      const subtotal = payload.total;
+      const fee = calcDelivery(subtotal);
+      const total = subtotal + fee;
+      document.getElementById('subtotalText').textContent = formatPrice(subtotal);
+      document.getElementById('feeText').textContent = (fee===0 && document.getElementById('deliveryMethod').value==='delivery' && subtotal>=DELIVERY.freeFrom)
+          ? "0 ₽ (бесплатно от " + formatPrice(DELIVERY.freeFrom) + ")"
+          : formatPrice(fee);
+      document.getElementById('totalText').textContent = formatPrice(total);
+
+      // Пояснение по зоне
+      const feeText = document.getElementById('deliveryFeeText');
+      const freeNote = document.getElementById('freeNote');
+      if (document.getElementById('deliveryMethod').value==='delivery'){
+        feeText.value = formatPrice(DELIVERY.byZone[document.getElementById('zone').value]||0);
+        freeNote.textContent = "Бесплатно от " + formatPrice(DELIVERY.freeFrom);
+      } else {
+        feeText.value = "";
+        freeNote.textContent = "";
+      }
+    }
+
+    function summaryText(payload, form, fee, total){
+      const lines = payload.items.map(i=>`- ${i.title} × ${i.qty} (${i.amount.toLocaleString('ru-RU')} ₽)`);
+      const header = `Новый заказ 🎉`;
+      const way = `📍 Способ получения: ${form.deliveryMethod==='pickup' ? `Самовывоз (${form.pickupHuman})` : `Доставка (${form.zoneHuman})`}`;
+      const person = `👤 Имя: ${form.name}\n📞 Телефон: ${form.phone}`;
+      const order = `📦 Заказ:\n` + lines.join("\n");
+      const subtotal = `\n\nСумма товаров: ${payload.total.toLocaleString('ru-RU')} ₽`;
+      const delivery = `\nДоставка: ${fee.toLocaleString('ru-RU')} ₽`;
+      const grand = `\n\n💰 Итого к оплате: ${total.toLocaleString('ru-RU')} ₽`;
+      const extra = form.deliveryMethod==='pickup'
+        ? ``
+        : `\n🏠 Адрес доставки: ${form.address || '-'}`;
+      const time = (form.date || form.time) ? `\n🕒 Время: ${[form.date, form.time].filter(Boolean).join(' ')}` : '';
+      const comment = form.comment ? `\n📝 Комментарий: “${form.comment}”` : '';
+      return `${header}\n${way}\n${person}\n${order}${subtotal}${delivery}${grand}${extra}${time}${comment}`;
+    }
+
+    async function sendOrder(){
+      const payload = buildPayload();
+      if (!payload.items.length) return alert("Корзина пуста");
+      const method = document.getElementById('deliveryMethod').value;
+      const pickupSel = document.getElementById('pickupPoint');
+      const zoneSel = document.getElementById('zone');
+      const fee = calcDelivery(payload.total);
+      const total = payload.total + fee;
+      const zoneMap = { city: "В черте города", suburb: "Пригород", far: "Далёкая зона" };
+      const form = {
+        deliveryMethod: method,
+        pickupPoint: pickupSel.value,
+        pickupHuman: pickupSel.selectedOptions[0].textContent,
+        zone: zoneSel.value,
+        zoneHuman: zoneMap[zoneSel.value],
+        address: document.getElementById('address').value.trim(),
+        date: document.getElementById('date').value,
+        time: document.getElementById('time').value,
+        name: document.getElementById('name').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        comment: document.getElementById('comment').value.trim(),
+      };
+      if (!form.phone) return alert("Укажите телефон");
+      if (!form.name) return alert("Укажите имя");
+
+      // Куда отправляем
+      const floristLogin = method==='pickup' ? BRANCH_TG[form.pickupPoint] : BRANCH_TG.delivery;
+      const text = summaryText(payload, form, fee, total);
+      try {
+        const resp = await fetch('/.netlify/functions/sendOrder', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ deliveryMethod: method, pickupPoint: form.pickupPoint, text })
+        });
+        if (resp.ok) {
+          alert('Заказ отправлен! Мы свяжемся с вами для подтверждения.');
+          for (const k in cart) delete cart[k];
+          save(); updateMainButton(); showCatalog();
+        } else {
+          alert('Не удалось отправить заказ. Напишите нам, пожалуйста, в Telegram.');
+        }
+      } catch (e) {
+        alert('Сбой отправки. Попробуйте ещё раз или свяжитесь с нами в Telegram.');
+      }
+    }
+
+    function updateMainButton(){
+      const tg = window.Telegram?.WebApp;
+      const items=Object.values(cart).reduce((s,n)=>s+n,0);
+      const total=Object.entries(cart).reduce((s,[id,qty])=>{ const p=PRODUCTS.find(x=>x.id===id); return s+(p?p.price*qty:0); },0);
+      if(tg){ if(items>0){ tg.MainButton.setText("Оформить заказ ("+items+") • "+total.toLocaleString('ru-RU')+" ₽").show(); } else tg.MainButton.hide(); }
+    }
+  </script>
+</body>
+</html>
