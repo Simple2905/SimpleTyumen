@@ -1,8 +1,6 @@
 [build]
   publish   = "."
-  # можно вообще не указывать functions,
-  # т.к. дефолт уже netlify/functions
-  # functions = "netlify/functions"
+  functions = "netlify/functions"   # ЖЁСТКО указываем директорию
 
 [functions]
   node_bundler = "esbuild"
