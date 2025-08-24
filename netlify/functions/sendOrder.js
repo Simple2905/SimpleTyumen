@@ -1,6 +1,5 @@
 // netlify/functions/sendOrder.js
-// Формирует красивый "чек" в Telegram из полей: name, phone, address, comment,
-// deliveryMethod, pickupPoint, zone, date, time, items[{name, price, qty}], fee, total, source.
+// Красивый чек: имя, телефон, адрес/самовывоз, товары, суммы, дата/время, комментарий, источник.
 
 const esc = (s) =>
   String(s ?? '')
@@ -31,7 +30,7 @@ exports.handler = async (event) => {
 
     const data = JSON.parse(event.body || '{}');
 
-    // --- Поля заказа из твоего payload ---
+    // --- Поля заказа ---
     const {
       name,
       phone,
@@ -40,11 +39,11 @@ exports.handler = async (event) => {
       deliveryMethod,     // 'pickup' | 'delivery'
       pickupPoint,        // 'polevaya' | 'burlaki'
       zone,               // 'city' | 'suburb' | 'far'
-      date,               // 'YYYY-MM-DD'
-      time,               // 'HH:mm'
-      items = [],         // [{ name, price, qty }]
+      date,
+      time,
+      items = [],
       fee = 0,
-      total,              // сумма товаров (можно прислать с фронта)
+      total,
       source = 'Мини-приложение',
       timePlaced
     } = data;
@@ -76,9 +75,9 @@ exports.handler = async (event) => {
         : esc(address || '—');
 
     // Когда
-    const whenText = [date, time].filter(Boolean).join(' ') || timePlaced || new Date().toISOString();
+    const whenText = [date, time].filter(Boolean).join(' ') || timePlaced || new Date().toLocaleString('ru-RU');
 
-    // Собираем чек (HTML)
+    // Собираем чек
     const text =
 `🧾 <b>Новый заказ</b>
 <b>№</b> ${orderId}
@@ -97,22 +96,15 @@ ${lines.length ? lines.join('\n') : '—'}
 📝 <b>Комментарий:</b> ${esc(comment || '—')}
 📲 <b>Источник:</b> ${esc(source)}`;
 
-    // Инлайн-кнопки: Позвонить / Открыть адрес (если есть)
-    const telUrl = phone ? `tel:${phone.replace(/[^\d+]/g, '')}` : null;
+    // Инлайн-кнопка только для карты (если доставка)
     const mapUrl =
       deliveryMethod === 'delivery' && address
         ? `https://yandex.ru/maps/?text=${encodeURIComponent(address)}`
         : null;
 
-    const reply_markup =
-      telUrl || mapUrl
-        ? {
-            inline_keyboard: [
-              ...(telUrl ? [[{ text: `📞 Позвонить: ${phone}`, url: telUrl }]] : []),
-              ...(mapUrl ? [[{ text: '🗺 Открыть адрес', url: mapUrl }]] : []),
-            ],
-          }
-        : undefined;
+    const reply_markup = mapUrl
+      ? { inline_keyboard: [[{ text: '🗺 Открыть адрес', url: mapUrl }]] }
+      : undefined;
 
     // Отправка в Telegram
     const tgResp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
