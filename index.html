@@ -47,6 +47,26 @@
     .qbtn{width:28px;height:28px;border-radius:8px;border:1px solid var(--muted);background:#fff;cursor:pointer}
     .count{width:24px;text-align:center;display:inline-block}
     .hidden{display:none}
+
+    /* NEW: Floating Cart Button (FAB) */
+    #fabCart{
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 1000;
+      display: none;            /* скрыт, если корзина пустая */
+      align-items: center;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 999px;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 700;
+      box-shadow: 0 10px 30px rgba(0,0,0,.15);
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #fabCart .sep{opacity:.7;margin:0 8px;}
   </style>
 </head>
 <body>
@@ -136,6 +156,11 @@
     <footer>🕘 Пн–Вс 08:30–21:00 • 🛵 Доставка по Тюмени</footer>
   </div>
 
+  <!-- NEW: плавающая кнопка корзины -->
+  <button id="fabCart" aria-label="Открыть корзину">
+    🛒 <span id="fabCount">0</span><span class="sep">·</span><span id="fabTotal">0 ₽</span>
+  </button>
+
 <script>
 const DELIVERY = { 
   byZone: { city: 200, suburb: 350, far: 500 }, 
@@ -176,10 +201,14 @@ function geocodeValidate(address){
 }
 
 function init(){
-  document.getElementById('goCheckout').onclick = showCheckout;
+  // кнопки
+  document.getElementById('goCheckout').addEventListener('click', (e)=>{ e.preventDefault(); showCheckout(); }); // SPA-переход
   document.getElementById('backToCatalog').onclick = showCatalog;
   document.getElementById('sendOrder').onclick = sendOrder;
   document.getElementById('sortSel').addEventListener('change', renderCatalog);
+
+  // NEW: FAB
+  document.getElementById('fabCart').addEventListener('click', showCheckout);
 
   // Чекбокс «Получатель = Заказчик»
   document.getElementById('samePerson').addEventListener('change', e=>{
@@ -213,8 +242,14 @@ function init(){
   }
   document.getElementById('address').addEventListener('input', ()=>{ addressValid=false; });
 
+  // NEW: Telegram MainButton клик открывает корзину
+  if (tg) {
+    tg.onEvent('mainButtonClicked', showCheckout);
+  }
+
   renderCatalog();
   renderCheckout();
+  updateCartUI(); // NEW
 }
 
 function renderCatalog(){
@@ -249,6 +284,7 @@ function renderCatalog(){
       save();
       renderCatalog();
       if (document.getElementById('view-checkout').classList.contains('active')) renderCheckout();
+      updateCartUI(); // NEW
     };
     grid.appendChild(el);
   });
@@ -292,7 +328,7 @@ function renderCheckout(){
       const act=e.currentTarget.dataset.act;
       if(act==='inc') cart[id]=(cart[id]||0)+1;
       else { if((cart[id]||0)>1) cart[id]-=1; else delete cart[id]; }
-      save(); renderCheckout();
+      save(); renderCheckout(); updateCartUI(); // NEW
     });
   });
 
@@ -318,6 +354,36 @@ function showCheckout(){
 function showCatalog(){
   document.getElementById('view-checkout').classList.remove('active');
   document.getElementById('view-catalog').classList.add('active');
+  renderCatalog();
+  updateCartUI(); // NEW
+}
+
+// NEW: единая функция обновления FAB + Telegram MainButton
+function updateCartUI(){
+  const payload = buildPayload();
+  const items = payload.items.reduce((s,i)=>s+i.qty,0);
+  const total = payload.total;
+
+  // Telegram MainButton
+  if (tg){
+    if (items>0){
+      tg.MainButton.setText(`Оформить заказ (${items}) • ${total.toLocaleString('ru-RU')} ₽`).show();
+    } else {
+      tg.MainButton.hide();
+    }
+  }
+
+  // FAB
+  const fab = document.getElementById('fabCart');
+  const fabCount = document.getElementById('fabCount');
+  const fabTotal = document.getElementById('fabTotal');
+  if (items>0){
+    fabCount.textContent = String(items);
+    fabTotal.textContent = `${total.toLocaleString('ru-RU')} ₽`;
+    fab.style.display = 'inline-flex';
+  } else {
+    fab.style.display = 'none';
+  }
 }
 
 // --- отправка ---
@@ -364,13 +430,12 @@ async function sendOrder(){
     if(!addressValid) return alert("Адрес должен быть в пределах г. Тюмень или Тюменского района");
   }
 
-  // проверка времени
+  // проверка времени (+2 часа от текущего), окна доставки/самовывоза
   const now=new Date();
   const chosen=new Date(form.date+"T"+form.time);
   const minTime=new Date(now.getTime()+2*60*60*1000);
   if(chosen<minTime) return alert("Время должно быть минимум через 2 часа");
 
-  // ограничение по диапазонам
   const [hh,mm]=form.time.split(":").map(Number);
   const mins=hh*60+mm;
   if(method==='delivery'){
@@ -413,15 +478,12 @@ async function sendOrder(){
     alert("Заказ отправлен!");
     for(const k in cart) delete cart[k];
     save();
+    updateCartUI(); // NEW
     showCatalog();
   } else {
     alert("Ошибка при отправке заказа");
   }
 }
 </script>
-
-
-
-
 </body>
 </html>
