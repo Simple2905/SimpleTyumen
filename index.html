@@ -4,13 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Коллекция к 1 сентября</title>
-
-  <!-- Telegram WebApp -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <!-- Яндекс.Карты (Suggest + Geocode) -->
+  <!-- Яндекс.Карты Suggest -->
   <script src="https://api-maps.yandex.ru/2.1/?apikey=41cc1bdf-35fa-4959-ae88-6493220031f0&lang=ru_RU&suggest_apikey=41cc1bdf-35fa-4959-ae88-6493220031f0" type="text/javascript"></script>
-
   <style>
     :root { --pad:16px; --brand:#6b8f52; --muted:#e2e5ea; --shadow:0 8px 24px rgba(0,0,0,.08); }
     *{box-sizing:border-box}
@@ -41,10 +37,9 @@
     .pill{padding:6px 10px;border-radius:999px;background:#f0f2f6;font-size:12px;margin-left:6px}
     footer{text-align:center;color:#777;padding:40px 0}
     @keyframes fadeInUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-
     .checkout-card{background:#fff;border-radius:20px;box-shadow:var(--shadow);padding:16px}
     .row{display:flex;justify-content:space-between;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap}
-    .field{flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+    .field{flex:1;min-width:200px;display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
     .note{font-size:12px;color:#666}
     .muted{color:#666;font-size:14px}
     .total{font-weight:700;font-size:18px}
@@ -52,24 +47,6 @@
     .qbtn{width:28px;height:28px;border-radius:8px;border:1px solid var(--muted);background:#fff;cursor:pointer}
     .count{width:24px;text-align:center;display:inline-block}
     .hidden{display:none}
-
-    /* Крупнее «Способ получения» и «Точка самовывоза» */
-    #deliveryWrap label, #pickupWrap label{ font-size:18px; font-weight:700; line-height:1.3; }
-    #deliveryMethod, #pickupPoint{
-      font-size:18px; padding:14px 16px; min-height:48px; border-radius:12px;
-    }
-    #deliveryMethod:focus, #pickupPoint:focus{
-      outline:none; box-shadow:0 0 0 3px rgba(107,143,82,.2); border-color:#6b8f52;
-    }
-
-    /* FAB корзина */
-    #fabCart{
-      position: fixed; right: 16px; bottom: 16px; z-index: 1000;
-      display: none; align-items: center; padding: 12px 16px;
-      border: none; border-radius: 999px; background: var(--brand); color: #fff;
-      font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,.15); cursor: pointer; font-size: 14px;
-    }
-    #fabCart .sep{opacity:.7;margin:0 8px;}
   </style>
 </head>
 <body>
@@ -103,28 +80,25 @@
           <div><b>Ваш заказ</b> <span class="pill" id="cartCount">0 товаров</span></div>
           <button id="backToCatalog" class="ghost" style="min-width:120px">Назад</button>
         </div>
-
         <div id="orderList" class="muted"></div>
 
         <div class="row"><b>Заказчик</b></div>
         <div class="row">
-          <div class="field"><label>Имя</label><input id="customerName" autocomplete="name" /></div>
-          <div class="field"><label>Телефон</label><input id="customerPhone" inputmode="tel" autocomplete="tel" /></div>
+          <div class="field"><label>Имя</label><input id="customerName" /></div>
+          <div class="field"><label>Телефон</label><input id="customerPhone" /></div>
         </div>
 
-        <div class="field">
-          <label><input type="checkbox" id="samePerson" /> Получатель = Заказчик</label>
-        </div>
+        <div class="field"><label><input type="checkbox" id="samePerson" /> Получатель = Заказчик</label></div>
 
         <div id="recipientFields">
           <div class="row"><b>Получатель</b></div>
           <div class="row">
             <div class="field"><label>Имя</label><input id="recipientName" /></div>
-            <div class="field"><label>Телефон</label><input id="recipientPhone" inputmode="tel" /></div>
+            <div class="field"><label>Телефон</label><input id="recipientPhone" /></div>
           </div>
         </div>
 
-        <div class="field" id="deliveryWrap">
+        <div class="field">
           <label>Способ получения</label>
           <select id="deliveryMethod">
             <option value="pickup">Самовывоз</option>
@@ -143,26 +117,17 @@
         <div id="addrWrap" class="field hidden">
           <label>Адрес доставки</label>
           <input id="address" placeholder="Начните вводить адрес..." />
-          <div class="note">Допустимы адреса только в г. Тюмени или Тюменском районе.</div>
+          <div class="note">Автопоиск по Яндекс.Картам</div>
         </div>
 
         <div class="row">
           <div class="field"><label>Дата</label><input id="date" type="date" /></div>
-          <div class="field">
-            <label>Временной слот (1 час)</label>
-            <select id="timeSlot"></select>
-          </div>
+          <div class="field"><label>Время</label><input id="time" type="time" /></div>
         </div>
 
-        <div class="field"><label>Комментарий</label><textarea id="comment" rows="3" placeholder="Открытка, домофон, пожелания..."></textarea></div>
-
+        <div class="field"><label>Комментарий</label><textarea id="comment" rows="3"></textarea></div>
         <div class="row">
-          <div class="total">
-            Товары: <span id="subtotalText">0 ₽</span><br>
-            Доставка: <span id="feeText">0 ₽</span><br>
-            <span class="note" id="freeNote"></span><br>
-            Итого: <span id="totalText">0 ₽</span>
-          </div>
+          <div class="total">Товары: <span id="subtotalText">0 ₽</span><br>Доставка: <span id="feeText">0 ₽</span><br>Итого: <span id="totalText">0 ₽</span></div>
           <button id="sendOrder" class="btn" style="min-width:200px">Отправить заказ</button>
         </div>
       </div>
@@ -171,134 +136,70 @@
     <footer>🕘 Пн–Вс 08:30–21:00 • 🛵 Доставка по Тюмени</footer>
   </div>
 
-  <!-- FAB корзины -->
-  <button id="fabCart" aria-label="Открыть корзину">
-    🛒 <span id="fabCount">0</span><span class="sep">·</span><span id="fabTotal">0 ₽</span>
-  </button>
-
 <script>
-/* ====== Константы ====== */
 const DELIVERY = { byZone: { city: 200, suburb: 350, far: 500 }, freeFrom: 4000, defaultZone: 'city' };
-const SLOT_WINDOWS = {
-  delivery: { startMin: 9*60+30, endMin: 21*60+30 }, // 09:30–21:30
-  pickup:   { startMin: 8*60+30, endMin: 21*60    }  // 08:30–21:00
-};
-
 let PRODUCTS = [];
 fetch('./products.json').then(r => r.json()).then(list => { PRODUCTS = list; init(); })
   .catch(_ => { PRODUCTS = []; init(); });
 
 const tg = window.Telegram?.WebApp; if (tg) tg.expand();
 const cart = JSON.parse(sessionStorage.getItem('cart')||'{}');
+
+// --- helpers ---
 function save(){ sessionStorage.setItem('cart', JSON.stringify(cart)); }
 function formatPrice(n){ return n.toLocaleString('ru-RU') + ' ₽'; }
 
-/* ====== Яндекс: проверка адреса ====== */
+// --- Яндекс адрес: состояние валидации ---
 let addressValid = false;
 let lastGeocodedAddress = "";
+
+// обёртка для геокодинга с Promise
 function geocodeValidate(address){
   return new Promise((resolve)=>{
     if (!window.ymaps || !address) return resolve(false);
     ymaps.geocode(address, { results: 1 }).then(res=>{
-      if (res.geoObjects.getLength() > 0){
-        const obj = res.geoObjects.get(0);
-        const line = obj.getAddressLine && obj.getAddressLine() ? obj.getAddressLine() : address;
-        const parts = (obj.getLocalities?.()||[]).join(' ') + " " + (obj.getAdministrativeAreas?.()||[]).join(' ');
-        const allowed = /Тюмень/i.test(parts) || /Тюменск/i.test(parts);
-        if (allowed){ lastGeocodedAddress = line; return resolve(true); }
+      const ok = res && res.geoObjects && res.geoObjects.getLength() > 0;
+      if (ok){
+        lastGeocodedAddress = res.geoObjects.get(0).getAddressLine
+          ? res.geoObjects.get(0).getAddressLine()
+          : address;
       }
-      resolve(false);
+      resolve(ok);
     }).catch(()=> resolve(false));
   });
 }
 
-/* ====== Телефон: маска и валидация ====== */
-function applyPhoneMask(el){
-  function onlyDigits(s){ return s.replace(/\D/g,''); }
-  el.addEventListener('input', ()=>{
-    let d = onlyDigits(el.value);
-    if (d.startsWith('8')) d = '7'+d.slice(1);
-    if (!d.startsWith('7')) d = '7' + d;
-    d = d.slice(0,11);
-    let out = '+7';
-    if (d.length>1) out += ' (' + d.slice(1,4);
-    if (d.length>=4) out += ') ' + d.slice(4,7);
-    if (d.length>=7) out += '-' + d.slice(7,9);
-    if (d.length>=9) out += '-' + d.slice(9,11);
-    el.value = out;
-  });
-}
-function isPhoneValid(masked){
-  const digits = masked.replace(/\D/g,'');
-  return digits.length===11 && digits.startsWith('7');
-}
-function phoneDigits(masked){ return masked.replace(/\D/g,''); }
-
-/* ====== Слоты времени ====== */
-function minutesToHHMM(mins){ const h=String(Math.floor(mins/60)).padStart(2,'0'); const m=String(mins%60).padStart(2,'0'); return `${h}:${m}`; }
-function generateHourSlots(dateStr, method){
-  const { startMin, endMin } = SLOT_WINDOWS[method];
-  const now = new Date();
-  const minStartTs = new Date(now.getTime()+2*60*60*1000); // +2 часа
-  const day = new Date(dateStr + 'T00:00:00');
-
-  const slots = [];
-  for (let m = startMin; m+60 <= endMin; m += 60){
-    const from = minutesToHHMM(m);
-    const to   = minutesToHHMM(m+60);
-    const slotStart = new Date(`${dateStr}T${from}:00`);
-    // если день в будущем — показываем все слоты; если сегодня — только >= +2 часа
-    if (day > new Date(now.getFullYear(), now.getMonth(), now.getDate()) || slotStart >= minStartTs){
-      slots.push({value: from, label: `${from}–${to}`});
-    }
-  }
-  return slots;
-}
-function ensureDateHasSlots(method){
-  const dateEl = document.getElementById('date');
-  const timeEl = document.getElementById('timeSlot');
-  let d = dateEl.value;
-  if (!d){
-    const today = new Date();
-    d = today.toISOString().slice(0,10);
-    dateEl.value = d;
-  }
-  let slots = generateHourSlots(d, method);
-  if (slots.length===0){
-    const dt = new Date(d+'T00:00:00'); dt.setDate(dt.getDate()+1);
-    d = dt.toISOString().slice(0,10);
-    dateEl.value = d;
-    slots = generateHourSlots(d, method);
-  }
-  timeEl.innerHTML = slots.map(s=>`<option value="${s.value}">${s.label}</option>`).join('');
-}
-
-/* ====== Инициализация ====== */
 function init(){
-  // кнопки
-  document.getElementById('goCheckout').addEventListener('click', e=>{ e.preventDefault(); showCheckout(); });
+  document.getElementById('goCheckout').onclick = showCheckout;
   document.getElementById('backToCatalog').onclick = showCatalog;
   document.getElementById('sendOrder').onclick = sendOrder;
-  document.getElementById('sortSel').addEventListener('change', renderCatalog);
-  document.getElementById('fabCart').addEventListener('click', showCheckout);
 
-  // Telegram MainButton → открыть корзину
-  if (tg) tg.onEvent('mainButtonClicked', showCheckout);
-
-  // чекбокс «получатель = заказчик»
+  // Чекбокс "Получатель = Заказчик"
   document.getElementById('samePerson').addEventListener('change', e=>{
-    const hide = e.target.checked;
-    document.getElementById('recipientFields').style.display = hide ? 'none' : 'block';
-    if (hide){
-      document.getElementById('recipientName').value  = document.getElementById('customerName').value;
-      document.getElementById('recipientPhone').value = document.getElementById('customerPhone').value;
+    if(e.target.checked){
+      document.getElementById('recipientName').value=document.getElementById('customerName').value;
+      document.getElementById('recipientPhone').value=document.getElementById('customerPhone').value;
+      document.getElementById('recipientFields').style.display='none';
+    } else {
+      document.getElementById('recipientFields').style.display='block';
     }
   });
 
-  // Яндекс-подсказки
+  // Показ/скрытие адреса при смене способа получения
+  const methodSel = document.getElementById('deliveryMethod');
+  const addrWrap  = document.getElementById('addrWrap');
+  methodSel.addEventListener('change', ()=>{
+    if (methodSel.value === 'delivery') addrWrap.classList.remove('hidden');
+    else addrWrap.classList.add('hidden');
+    renderCheckout();
+  });
+  if (methodSel.value === 'delivery') addrWrap.classList.remove('hidden'); else addrWrap.classList.add('hidden');
+
+  // Яндекс-подсказки + валидация адреса
   if (window.ymaps) {
     ymaps.ready(()=>{
       const suggest = new ymaps.SuggestView('address');
+      // при выборе из подсказки — пробуем геокодировать и подтвердить адрес
       suggest.events.add('select', async (e)=>{
         const val = e.get('item')?.value || document.getElementById('address').value;
         addressValid = await geocodeValidate(val);
@@ -306,73 +207,33 @@ function init(){
       });
     });
   }
-  document.getElementById('address').addEventListener('input', ()=>{ addressValid=false; });
-
-  // маска телефонов
-  applyPhoneMask(document.getElementById('customerPhone'));
-  applyPhoneMask(document.getElementById('recipientPhone'));
-
-  // автосохранение заказчика
-  const LS_KEY = 'simpetyumen_customer';
-  const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-  if (saved.name)  document.getElementById('customerName').value  = saved.name;
-  if (saved.phone) document.getElementById('customerPhone').value = saved.phone;
-  ['customerName','customerPhone'].forEach(id=>{
-    document.getElementById(id).addEventListener('input', ()=>{
-      localStorage.setItem(LS_KEY, JSON.stringify({
-        name:  document.getElementById('customerName').value.trim(),
-        phone: document.getElementById('customerPhone').value.trim()
-      }));
-    });
+  // если пользователь начал печатать руками — сбрасываем флаг валидности
+  const addrInput = document.getElementById('address');
+  addrInput.addEventListener('input', ()=>{ addressValid = false; });
+  addrInput.addEventListener('blur', async ()=>{
+    if (addrInput.value && !addressValid){
+      addressValid = await geocodeValidate(addrInput.value);
+      if (addressValid) addrInput.value = lastGeocodedAddress || addrInput.value;
+    }
   });
-
-  // переключение способа → показать/скрыть адрес и пересчитать слоты
-  const methodSel = document.getElementById('deliveryMethod');
-  const addrWrap  = document.getElementById('addrWrap');
-  methodSel.addEventListener('change', ()=>{
-    if (methodSel.value === 'delivery') addrWrap.classList.remove('hidden');
-    else addrWrap.classList.add('hidden');
-    ensureDateHasSlots(methodSel.value);
-    renderCheckout();
-  });
-
-  // изменение даты → пересчитать слоты
-  document.getElementById('date').addEventListener('change', ()=>{
-    ensureDateHasSlots(methodSel.value);
-  });
-
-  // дефолты и первичная отрисовка
-  const today = new Date(); document.getElementById('date').value = today.toISOString().slice(0,10);
-  ensureDateHasSlots(methodSel.value);
 
   renderCatalog();
   renderCheckout();
-  updateCartUI();
 }
 
-/* ====== Рендер каталога / корзины ====== */
 function renderCatalog(){
   const grid = document.getElementById('grid');
   let list = PRODUCTS.slice();
-  const sortSel = document.getElementById('sortSel')?.value || 'default';
-  list.sort((a,b)=>{
-    const pa = Number(a.price.toString().replace(/\D/g,''))||0;
-    const pb = Number(b.price.toString().replace(/\D/g,''))||0;
-    if (sortSel==='asc') return pa-pb;
-    if (sortSel==='desc') return pb-pa;
-    return 0;
-  });
-
   grid.innerHTML = '';
   list.forEach(p=>{
     const qty = cart[p.id]||0;
     const el = document.createElement('div');
     el.className = 'card';
     el.innerHTML = `
-      <div class="imgbox"><img src="./images/${p.img}" alt="" loading="lazy"></div>
+      <div class="imgbox"><img src="./images/${p.img}" alt=""></div>
       <div class="info">
         <div class="title">${p.title}</div>
-        <div class="price">${formatPrice(Number(p.price.toString().replace(/\D/g,'')))}</div>
+        <div class="price">${formatPrice(p.price)}</div>
         <div class="controls"><button class="btn add" data-id="${p.id}">В корзину ${qty>0?`<span class="pill">${qty}</span>`:''}</button></div>
       </div>`;
     el.querySelector('.add').onclick = e=>{
@@ -381,7 +242,6 @@ function renderCatalog(){
       save();
       renderCatalog();
       if (document.getElementById('view-checkout').classList.contains('active')) renderCheckout();
-      updateCartUI();
     };
     grid.appendChild(el);
   });
@@ -390,68 +250,74 @@ function renderCatalog(){
 function buildPayload(){
   const items = Object.entries(cart).map(([id,qty])=>{
     const p = PRODUCTS.find(x=>x.id===id);
-    const priceNum = Number(p.price.toString().replace(/\D/g,''))||0;
-    return {id,title:p.title,price:priceNum,qty,amount:priceNum*qty};
+    return {id,title:p.title,price:p.price,qty,amount:p.price*qty};
   });
   const total = items.reduce((s,i)=>s+i.amount,0);
   return {items,total};
 }
 
+// Бесплатно от 4000 ₽
 function calcDelivery(subtotal){
   const method = document.getElementById('deliveryMethod').value;
-  if (method==='pickup') return 0;
-  if (subtotal >= DELIVERY.freeFrom) return 0;
+  if (method === 'pickup') return 0;
+  if (subtotal >= DELIVERY.freeFrom) return 0; // бесплатная доставка
+  // можно развить по зонам, сейчас плоская городская цена:
   return DELIVERY.byZone.city;
 }
 
 function renderCheckout(){
   const payload = buildPayload();
-  document.getElementById('cartCount').textContent = payload.items.length+" товар(а)";
 
-  const listEl=document.getElementById('orderList');
-  listEl.innerHTML=payload.items.map(i=>`
-    <div class="row">
-      <div style="flex:1">${i.title}</div>
-      <div class="qtyline">
-        <button class="qbtn" data-id="${i.id}" data-act="dec">−</button>
-        <span class="count">${i.qty}</span>
-        <button class="qbtn" data-id="${i.id}" data-act="inc">+</button>
-      </div>
-      <div style="min-width:90px;text-align:right">${formatPrice(i.amount)}</div>
-    </div>`).join("");
-  listEl.querySelectorAll('.qbtn').forEach(btn=>{
-    btn.addEventListener('click', e=>{
-      const id=e.currentTarget.dataset.id;
-      const act=e.currentTarget.dataset.act;
-      if(act==='inc') cart[id]=(cart[id]||0)+1;
-      else { if((cart[id]||0)>1) cart[id]-=1; else delete cart[id]; }
-      save(); renderCheckout(); updateCartUI();
+  const countEl = document.getElementById('cartCount');
+  if (countEl) countEl.textContent = payload.items.length + " товар(а)";
+
+  const listEl = document.getElementById('orderList');
+  if (listEl) {
+    listEl.innerHTML = payload.items.map(i=>`
+      <div class="row">
+        <div style="flex:1">${i.title}</div>
+        <div class="qtyline">
+          <button class="qbtn" data-id="${i.id}" data-act="dec">−</button>
+          <span class="count">${i.qty}</span>
+          <button class="qbtn" data-id="${i.id}" data-act="inc">+</button>
+        </div>
+        <div style="min-width:90px;text-align:right">${formatPrice(i.amount)}</div>
+      </div>`).join("");
+
+    listEl.querySelectorAll('.qbtn').forEach(btn=>{
+      btn.addEventListener('click',(e)=>{
+        const id=e.currentTarget.dataset.id;
+        const act=e.currentTarget.dataset.act;
+        if (act==='inc') cart[id]=(cart[id]||0)+1;
+        else { if ((cart[id]||0)>1) cart[id]-=1; else delete cart[id]; }
+        save();
+        renderCheckout();
+      });
     });
-  });
-
-  const subtotal=payload.total;
-  const fee=calcDelivery(subtotal);
-  const total=subtotal+fee;
-
-  document.getElementById('subtotalText').textContent=formatPrice(subtotal);
-  const feeEl = document.getElementById('feeText');
-  const freeNote = document.getElementById('freeNote');
-  const method = document.getElementById('deliveryMethod').value;
-  if (method==='delivery' && subtotal>=DELIVERY.freeFrom){
-    feeEl.textContent = "0 ₽ (бесплатно)";
-    freeNote.textContent = `Бесплатно от ${DELIVERY.freeFrom.toLocaleString('ru-RU')} ₽`;
-  } else if (method==='delivery') {
-    feeEl.textContent = formatPrice(fee);
-    freeNote.textContent = `Бесплатно от ${DELIVERY.freeFrom.toLocaleString('ru-RU')} ₽`;
-  } else {
-    feeEl.textContent = "0 ₽";
-    freeNote.textContent = "";
   }
-  document.getElementById('totalText').textContent=formatPrice(total);
+
+  const subtotal = payload.total;
+  const fee = calcDelivery(subtotal);
+  const total = subtotal + fee;
+
+  const st = document.getElementById('subtotalText');
+  const ft = document.getElementById('feeText');
+  const tt = document.getElementById('totalText');
+  const method = document.getElementById('deliveryMethod').value;
+
+  if (st) st.textContent = formatPrice(subtotal);
+  if (ft) {
+    if (method==='delivery' && subtotal >= DELIVERY.freeFrom){
+      ft.textContent = `0 ₽ (бесплатно от ${DELIVERY.freeFrom.toLocaleString('ru-RU')} ₽)`;
+    } else {
+      ft.textContent = formatPrice(fee);
+    }
+  }
+  if (tt) tt.textContent = formatPrice(total);
 }
 
 function showCheckout(){
-  if(Object.keys(cart).length===0) return alert("Корзина пуста");
+  if (Object.keys(cart).length===0) { alert("Корзина пуста"); return; }
   document.getElementById('view-catalog').classList.remove('active');
   document.getElementById('view-checkout').classList.add('active');
   renderCheckout();
@@ -460,127 +326,107 @@ function showCheckout(){
 function showCatalog(){
   document.getElementById('view-checkout').classList.remove('active');
   document.getElementById('view-catalog').classList.add('active');
-  renderCatalog();
-  updateCartUI();
 }
 
-// Обновление FAB + Telegram MainButton
-function updateCartUI(){
-  const payload = buildPayload();
-  const items = payload.items.reduce((s,i)=>s+i.qty,0);
-  const total = payload.total;
-
-  if (tg){
-    if (items>0){
-      tg.MainButton.setText(`Оформить заказ (${items}) • ${total.toLocaleString('ru-RU')} ₽`).show();
-    } else {
-      tg.MainButton.hide();
-    }
-  }
-
-  const fab = document.getElementById('fabCart');
-  const fabCount = document.getElementById('fabCount');
-  const fabTotal = document.getElementById('fabTotal');
-  if (items>0){
-    fabCount.textContent = String(items);
-    fabTotal.textContent = `${total.toLocaleString('ru-RU')} ₽`;
-    fab.style.display = 'inline-flex';
-  } else {
-    fab.style.display = 'none';
-  }
-}
-
-/* ====== Отправка ====== */
+// ОТПРАВКА
 async function sendOrder(){
-  const payload=buildPayload();
-  if(!payload.items.length) return alert("Корзина пуста");
+  const payload = buildPayload();
+  if (!payload.items.length) return alert("Корзина пуста");
 
-  const method=document.getElementById('deliveryMethod').value;
-  const fee=calcDelivery(payload.total);
+  const method = document.getElementById('deliveryMethod').value;
+  const fee    = calcDelivery(payload.total);
 
-  const samePerson=document.getElementById('samePerson').checked;
+  const samePerson = document.getElementById('samePerson').checked;
 
-  const form={
+  const form = {
     customerName: document.getElementById('customerName').value.trim(),
     customerPhone: document.getElementById('customerPhone').value.trim(),
     recipientName: document.getElementById('recipientName').value.trim(),
     recipientPhone: document.getElementById('recipientPhone').value.trim(),
     address: document.getElementById('address').value.trim(),
     date: document.getElementById('date').value,
-    time: document.getElementById('timeSlot').selectedOptions[0]?.textContent || '',
-    timeStart: document.getElementById('timeSlot').value || '', // начало интервала (HH:MM)
+    time: document.getElementById('time').value,
     comment: document.getElementById('comment').value.trim(),
     pickupPoint: document.getElementById('pickupPoint').value
   };
 
-  if(!form.customerName) return alert("Укажите имя заказчика");
-  if(!isPhoneValid(form.customerPhone)) return alert("Телефон заказчика в формате +7 (XXX) XXX-XX-XX");
-  if(!form.date) return alert("Укажите дату");
-  if(!form.timeStart) return alert("Выберите временной слот");
+  // Обязательные поля
+  if (!form.customerName) return alert("Укажите имя заказчика");
+  if (!form.customerPhone) return alert("Укажите телефон заказчика");
+  if (!form.date) return alert("Укажите дату");
+  if (!form.time) return alert("Укажите время");
 
-  if(!samePerson){
-    if(!form.recipientName) return alert("Укажите имя получателя");
-    if(!isPhoneValid(form.recipientPhone)) return alert("Телефон получателя в формате +7 (XXX) XXX-XX-XX");
+  // Получатель: если чекбокс снят — требуем поля получателя
+  if (!samePerson) {
+    if (!form.recipientName) return alert("Укажите имя получателя");
+    if (!form.recipientPhone) return alert("Укажите телефон получателя");
   } else {
-    form.recipientName=form.customerName;
-    form.recipientPhone=form.customerPhone;
+    // копируем данные заказчика
+    form.recipientName = form.customerName;
+    form.recipientPhone = form.customerPhone;
   }
 
-  if(method==='delivery'){
-    if(!form.address) return alert("Укажите адрес доставки");
-    if(!addressValid){
+  // Адрес обязателен для доставки и должен пройти геокодирование
+  if (method==='delivery') {
+    if (!form.address) return alert("Укажите адрес доставки");
+    // если адрес ещё не валидирован — валидируем сейчас
+    if (!addressValid) {
       addressValid = await geocodeValidate(form.address);
-      if(addressValid) form.address = lastGeocodedAddress||form.address;
+      if (addressValid) {
+        form.address = lastGeocodedAddress || form.address;
+        document.getElementById('address').value = form.address;
+      }
     }
-    if(!addressValid) return alert("Адрес должен быть в пределах г. Тюмень или Тюменского района");
+    if (!addressValid) return alert("Подтвердите адрес из подсказки Яндекс или введите корректный адрес");
   }
 
-  // Дополнительная проверка слота: начало слота минимум через 2 часа от текущего
+  // Нельзя прошедшую дату/время и меньше чем через 2 часа
   const now = new Date();
-  const minStartTs = new Date(now.getTime()+2*60*60*1000);
-  const slotStart = new Date(`${form.date}T${form.timeStart}:00`);
-  if (slotStart < minStartTs){
-    return alert("Начало выбранного слота должно быть минимум через 2 часа");
-  }
+  const chosen = new Date(form.date + "T" + form.time);
+  const minTime = new Date(now.getTime() + 2*60*60*1000);
+  if (chosen < minTime) return alert("Время должно быть минимум через 2 часа от текущего");
 
-  const items=payload.items.map(i=>({
-    name:i.title,
-    price:i.price.toLocaleString('ru-RU')+' ₽',
-    qty:i.qty
+  // items как в Postman
+  const items = payload.items.map(i => ({
+    name: i.title,
+    price: i.price.toLocaleString('ru-RU') + ' ₽',
+    qty: i.qty
   }));
 
-  const body={
-    customer:{ name:form.customerName, phone:phoneDigits(form.customerPhone) },
-    recipient:{ name:form.recipientName, phone:phoneDigits(form.recipientPhone) },
-    deliveryMethod:method,
-    pickupPoint:form.pickupPoint,
-    address:form.address,
-    date:form.date,
-    time:form.time,          // строка вида "HH:MM–HH:MM"
-    comment:form.comment,
+  const body = {
+    customer: { name: form.customerName, phone: form.customerPhone },
+    recipient: { name: form.recipientName, phone: form.recipientPhone },
+    deliveryMethod: method,
+    pickupPoint: form.pickupPoint,
+    address: form.address,
+    date: form.date,
+    time: form.time,
+    comment: form.comment,
     items,
-    source:'Мини-приложение',
-    total:payload.total,
+    source: 'Мини-приложение',
+    total: payload.total,
     fee,
-    timePlaced:new Date().toISOString()
+    timePlaced: new Date().toISOString()
   };
 
-  const resp=await fetch('/api/sendOrder',{
+  const resp = await fetch('/api/sendOrder',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
-  const json=await resp.json().catch(()=>({}));
-  if(resp.ok&&json.ok){
+  const json = await resp.json().catch(()=>({}));
+  if(resp.ok && json.ok){
     alert("Заказ отправлен!");
     for(const k in cart) delete cart[k];
     save();
-    updateCartUI();
     showCatalog();
   } else {
     alert("Ошибка при отправке заказа");
   }
 }
 </script>
+
+
+
 </body>
 </html>
