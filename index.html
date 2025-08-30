@@ -70,6 +70,8 @@
       font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,.15); cursor: pointer; font-size: 14px;
     }
     #fabCart .sep{opacity:.7;margin:0 8px;}
+    /* Баннер "открой в Telegram" */
+    #tgBanner{display:none;margin:12px 0;padding:10px 12px;border-radius:12px;background:#fff3cd;border:1px solid #ffe08a;color:#7a5a00}
   </style>
 </head>
 <body>
@@ -82,6 +84,10 @@
   </header>
 
   <div class="wrap">
+    <div id="tgBanner" class="muted">
+      Для мгновенного подтверждения заказа в личные сообщения откройте эту витрину через наш Telegram-бот.
+    </div>
+
     <!-- CATALOG -->
     <section id="view-catalog" class="view active">
       <div class="sort">
@@ -188,7 +194,14 @@ let PRODUCTS = [];
 fetch('./products.json').then(r => r.json()).then(list => { PRODUCTS = list; init(); })
   .catch(_ => { PRODUCTS = []; init(); });
 
+/* Telegram WebApp */
 const tg = window.Telegram?.WebApp; if (tg) tg.expand();
+
+/* Показать баннер, если открыто не в Telegram */
+document.addEventListener('DOMContentLoaded', () => {
+  if (!tg) document.getElementById('tgBanner').style.display = 'block';
+});
+
 const cart = JSON.parse(sessionStorage.getItem('cart')||'{}');
 function save(){ sessionStorage.setItem('cart', JSON.stringify(cart)); }
 function formatPrice(n){ return n.toLocaleString('ru-RU') + ' ₽'; }
@@ -247,7 +260,6 @@ function generateHourSlots(dateStr, method){
     const from = minutesToHHMM(m);
     const to   = minutesToHHMM(m+60);
     const slotStart = new Date(`${dateStr}T${from}:00`);
-    // если день в будущем — показываем все слоты; если сегодня — только >= +2 часа
     if (day > new Date(now.getFullYear(), now.getMonth(), now.getDate()) || slotStart >= minStartTs){
       slots.push({value: from, label: `${from}–${to}`});
     }
@@ -275,17 +287,14 @@ function ensureDateHasSlots(method){
 
 /* ====== Инициализация ====== */
 function init(){
-  // кнопки
   document.getElementById('goCheckout').addEventListener('click', e=>{ e.preventDefault(); showCheckout(); });
   document.getElementById('backToCatalog').onclick = showCatalog;
   document.getElementById('sendOrder').onclick = sendOrder;
   document.getElementById('sortSel').addEventListener('change', renderCatalog);
   document.getElementById('fabCart').addEventListener('click', showCheckout);
 
-  // Telegram MainButton → открыть корзину
   if (tg) tg.onEvent('mainButtonClicked', showCheckout);
 
-  // чекбокс «получатель = заказчик»
   document.getElementById('samePerson').addEventListener('change', e=>{
     const hide = e.target.checked;
     document.getElementById('recipientFields').style.display = hide ? 'none' : 'block';
@@ -295,7 +304,6 @@ function init(){
     }
   });
 
-  // Яндекс-подсказки
   if (window.ymaps) {
     ymaps.ready(()=>{
       const suggest = new ymaps.SuggestView('address');
@@ -308,11 +316,9 @@ function init(){
   }
   document.getElementById('address').addEventListener('input', ()=>{ addressValid=false; });
 
-  // маска телефонов
   applyPhoneMask(document.getElementById('customerPhone'));
   applyPhoneMask(document.getElementById('recipientPhone'));
 
-  // автосохранение заказчика
   const LS_KEY = 'simpetyumen_customer';
   const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
   if (saved.name)  document.getElementById('customerName').value  = saved.name;
@@ -326,7 +332,6 @@ function init(){
     });
   });
 
-  // переключение способа → показать/скрыть адрес и пересчитать слоты
   const methodSel = document.getElementById('deliveryMethod');
   const addrWrap  = document.getElementById('addrWrap');
   methodSel.addEventListener('change', ()=>{
@@ -336,12 +341,10 @@ function init(){
     renderCheckout();
   });
 
-  // изменение даты → пересчитать слоты
   document.getElementById('date').addEventListener('change', ()=>{
     ensureDateHasSlots(methodSel.value);
   });
 
-  // дефолты и первичная отрисовка
   const today = new Date(); document.getElementById('date').value = today.toISOString().slice(0,10);
   ensureDateHasSlots(methodSel.value);
 
@@ -508,7 +511,7 @@ async function sendOrder(){
     address: document.getElementById('address').value.trim(),
     date: document.getElementById('date').value,
     time: document.getElementById('timeSlot').selectedOptions[0]?.textContent || '',
-    timeStart: document.getElementById('timeSlot').value || '', // начало интервала (HH:MM)
+    timeStart: document.getElementById('timeSlot').value || '',
     comment: document.getElementById('comment').value.trim(),
     pickupPoint: document.getElementById('pickupPoint').value
   };
@@ -535,7 +538,7 @@ async function sendOrder(){
     if(!addressValid) return alert("Адрес должен быть в пределах г. Тюмень или Тюменского района");
   }
 
-  // Дополнительная проверка слота: начало слота минимум через 2 часа от текущего
+  // Слот минимум через 2 часа
   const now = new Date();
   const minStartTs = new Date(now.getTime()+2*60*60*1000);
   const slotStart = new Date(`${form.date}T${form.timeStart}:00`);
@@ -549,6 +552,9 @@ async function sendOrder(){
     qty:i.qty
   }));
 
+  /* NEW: данные Telegram-пользователя для личного подтверждения */
+  const tgUser = tg?.initDataUnsafe?.user || null; // NEW
+
   const body={
     customer:{ name:form.customerName, phone:phoneDigits(form.customerPhone) },
     recipient:{ name:form.recipientName, phone:phoneDigits(form.recipientPhone) },
@@ -556,13 +562,14 @@ async function sendOrder(){
     pickupPoint:form.pickupPoint,
     address:form.address,
     date:form.date,
-    time:form.time,          // строка вида "HH:MM–HH:MM"
+    time:form.time,
     comment:form.comment,
     items,
     source:'Мини-приложение',
     total:payload.total,
     fee,
-    timePlaced:new Date().toISOString()
+    timePlaced:new Date().toISOString(),
+    tgUser // NEW — отправляем на бэкенд, чтобы бот написал клиенту
   };
 
   const resp=await fetch('/api/sendOrder',{
