@@ -70,18 +70,6 @@
       font-weight: 700; box-shadow: 0 10px 30px rgba(0,0,0,.15); cursor: pointer; font-size: 14px;
     }
     #fabCart .sep{opacity:.7;margin:0 8px;}
-
-    /* === Анимации корзины === */
-    .fly-clone{
-      position: fixed; z-index: 2000; pointer-events: none; border-radius: 12px;
-      width: 120px; height: 160px; object-fit: cover; box-shadow: var(--shadow);
-      transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .6s ease;
-    }
-    .cart-row{opacity:0; transform: translateY(6px); transition: opacity .25s ease, transform .25s ease;}
-    .cart-row.enter{opacity:1; transform: translateY(0);}
-    .cart-row.removing{opacity:0; transform: translateY(-6px);}
-    .thumb{width:44px; height:60px; object-fit:cover; border-radius:8px; margin-right:8px; flex-shrink:0; background:#eee;}
-    .cart-title{display:flex; align-items:center; gap:8px;}
   </style>
 </head>
 <body>
@@ -259,6 +247,7 @@ function generateHourSlots(dateStr, method){
     const from = minutesToHHMM(m);
     const to   = minutesToHHMM(m+60);
     const slotStart = new Date(`${dateStr}T${from}:00`);
+    // если день в будущем — показываем все слоты; если сегодня — только >= +2 часа
     if (day > new Date(now.getFullYear(), now.getMonth(), now.getDate()) || slotStart >= minStartTs){
       slots.push({value: from, label: `${from}–${to}`});
     }
@@ -282,31 +271,6 @@ function ensureDateHasSlots(method){
     slots = generateHourSlots(d, method);
   }
   timeEl.innerHTML = slots.map(s=>`<option value="${s.value}">${s.label}</option>`).join('');
-}
-
-/* ====== Анимация полёта в корзину ====== */
-function flyToCart(imgEl){
-  const fab = document.getElementById('fabCart');
-  if (!imgEl || !fab) return;
-  const imgRect = imgEl.getBoundingClientRect();
-  const fabRect = fab.getBoundingClientRect();
-
-  const clone = imgEl.cloneNode(true);
-  clone.classList.add('fly-clone');
-  clone.style.left = imgRect.left + 'px';
-  clone.style.top  = imgRect.top  + 'px';
-  clone.style.width = imgRect.width + 'px';
-  clone.style.height = imgRect.height + 'px';
-  document.body.appendChild(clone);
-
-  const dx = (fabRect.left + fabRect.width/2) - (imgRect.left + imgRect.width/2);
-  const dy = (fabRect.top  + fabRect.height/2) - (imgRect.top  + imgRect.height/2);
-
-  requestAnimationFrame(()=>{
-    clone.style.transform = `translate(${dx}px, ${dy}px) scale(.25)`;
-    clone.style.opacity = '0.2';
-  });
-  setTimeout(()=> clone.remove(), 650);
 }
 
 /* ====== Инициализация ====== */
@@ -362,7 +326,7 @@ function init(){
     });
   });
 
-  // переключение способа → адрес + слоты
+  // переключение способа → показать/скрыть адрес и пересчитать слоты
   const methodSel = document.getElementById('deliveryMethod');
   const addrWrap  = document.getElementById('addrWrap');
   methodSel.addEventListener('change', ()=>{
@@ -372,12 +336,12 @@ function init(){
     renderCheckout();
   });
 
-  // изменение даты → слоты
+  // изменение даты → пересчитать слоты
   document.getElementById('date').addEventListener('change', ()=>{
     ensureDateHasSlots(methodSel.value);
   });
 
-  // дефолты
+  // дефолты и первичная отрисовка
   const today = new Date(); document.getElementById('date').value = today.toISOString().slice(0,10);
   ensureDateHasSlots(methodSel.value);
 
@@ -411,14 +375,10 @@ function renderCatalog(){
         <div class="price">${formatPrice(Number(p.price.toString().replace(/\D/g,'')))}</div>
         <div class="controls"><button class="btn add" data-id="${p.id}">В корзину ${qty>0?`<span class="pill">${qty}</span>`:''}</button></div>
       </div>`;
-
-    const imgEl = el.querySelector('.imgbox img');
-
     el.querySelector('.add').onclick = e=>{
       const id=e.currentTarget.dataset.id;
       cart[id]=(cart[id]||0)+1;
       save();
-      flyToCart(imgEl);
       renderCatalog();
       if (document.getElementById('view-checkout').classList.contains('active')) renderCheckout();
       updateCartUI();
@@ -431,7 +391,7 @@ function buildPayload(){
   const items = Object.entries(cart).map(([id,qty])=>{
     const p = PRODUCTS.find(x=>x.id===id);
     const priceNum = Number(p.price.toString().replace(/\D/g,''))||0;
-    return {id,title:p.title,price:priceNum,qty,amount:priceNum*qty,img:p.img};
+    return {id,title:p.title,price:priceNum,qty,amount:priceNum*qty};
   });
   const total = items.reduce((s,i)=>s+i.amount,0);
   return {items,total};
@@ -450,11 +410,8 @@ function renderCheckout(){
 
   const listEl=document.getElementById('orderList');
   listEl.innerHTML=payload.items.map(i=>`
-    <div class="row cart-row" data-id="${i.id}">
-      <div class="cart-title" style="flex:1">
-        <img class="thumb" src="./images/${i.img}" alt="">
-        <div>${i.title}</div>
-      </div>
+    <div class="row">
+      <div style="flex:1">${i.title}</div>
       <div class="qtyline">
         <button class="qbtn" data-id="${i.id}" data-act="dec">−</button>
         <span class="count">${i.qty}</span>
@@ -462,36 +419,13 @@ function renderCheckout(){
       </div>
       <div style="min-width:90px;text-align:right">${formatPrice(i.amount)}</div>
     </div>`).join("");
-
-  requestAnimationFrame(()=>{
-    document.querySelectorAll('.cart-row').forEach(r=> r.classList.add('enter'));
-  });
-
   listEl.querySelectorAll('.qbtn').forEach(btn=>{
     btn.addEventListener('click', e=>{
       const id=e.currentTarget.dataset.id;
       const act=e.currentTarget.dataset.act;
-      if(act==='inc'){
-        cart[id]=(cart[id]||0)+1;
-        save(); renderCheckout(); updateCartUI();
-      } else {
-        if ((cart[id]||0) <= 1){
-          const row = listEl.querySelector(`.cart-row[data-id="${id}"]`);
-          if (row){
-            row.classList.add('removing');
-            setTimeout(()=>{
-              delete cart[id];
-              save(); renderCheckout(); updateCartUI();
-            }, 220);
-          } else {
-            delete cart[id];
-            save(); renderCheckout(); updateCartUI();
-          }
-        } else {
-          cart[id]-=1;
-          save(); renderCheckout(); updateCartUI();
-        }
-      }
+      if(act==='inc') cart[id]=(cart[id]||0)+1;
+      else { if((cart[id]||0)>1) cart[id]-=1; else delete cart[id]; }
+      save(); renderCheckout(); updateCartUI();
     });
   });
 
@@ -556,7 +490,7 @@ function updateCartUI(){
   }
 }
 
-/* ====== Отправка (плоский payload для функции) ====== */
+/* ====== Отправка ====== */
 async function sendOrder(){
   const payload=buildPayload();
   if(!payload.items.length) return alert("Корзина пуста");
@@ -573,8 +507,8 @@ async function sendOrder(){
     recipientPhone: document.getElementById('recipientPhone').value.trim(),
     address: document.getElementById('address').value.trim(),
     date: document.getElementById('date').value,
-    time: document.getElementById('timeSlot').selectedOptions[0]?.textContent || '', // "HH:MM–HH:MM"
-    timeStart: document.getElementById('timeSlot').value || '', // "HH:MM"
+    time: document.getElementById('timeSlot').selectedOptions[0]?.textContent || '',
+    timeStart: document.getElementById('timeSlot').value || '', // начало интервала (HH:MM)
     comment: document.getElementById('comment').value.trim(),
     pickupPoint: document.getElementById('pickupPoint').value
   };
@@ -601,7 +535,7 @@ async function sendOrder(){
     if(!addressValid) return alert("Адрес должен быть в пределах г. Тюмень или Тюменского района");
   }
 
-  // слот не раньше чем через 2 часа
+  // Дополнительная проверка слота: начало слота минимум через 2 часа от текущего
   const now = new Date();
   const minStartTs = new Date(now.getTime()+2*60*60*1000);
   const slotStart = new Date(`${form.date}T${form.timeStart}:00`);
@@ -615,43 +549,36 @@ async function sendOrder(){
     qty:i.qty
   }));
 
-  // ПЛОСКИЕ ПОЛЯ — совместимо с вашей функцией на Netlify
   const body={
-    name: form.customerName,
-    phone: phoneDigits(form.customerPhone),
-    address: method==='pickup' ? '' : form.address,
-    comment: form.comment,
-    deliveryMethod: method,
-    pickupPoint: form.pickupPoint,
-    date: form.date,
-    time: form.time,   // "HH:MM–HH:MM"
+    customer:{ name:form.customerName, phone:phoneDigits(form.customerPhone) },
+    recipient:{ name:form.recipientName, phone:phoneDigits(form.recipientPhone) },
+    deliveryMethod:method,
+    pickupPoint:form.pickupPoint,
+    address:form.address,
+    date:form.date,
+    time:form.time,          // строка вида "HH:MM–HH:MM"
+    comment:form.comment,
     items,
     source:'Мини-приложение',
-    total: payload.total,
+    total:payload.total,
     fee,
     timePlaced:new Date().toISOString()
   };
 
-  try{
-    const resp=await fetch('/api/sendOrder',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body)
-    });
-    const json=await resp.json().catch(()=>({}));
-    if(resp.ok&&json.ok){
-      alert("Заказ отправлен!");
-      for(const k in cart) delete cart[k];
-      save();
-      updateCartUI();
-      showCatalog();
-    } else {
-      console.warn('sendOrder failed:', resp.status, json);
-      alert("Ошибка при отправке заказа");
-    }
-  } catch(e){
-    console.error(e);
-    alert("Сбой отправки. Попробуйте ещё раз.");
+  const resp=await fetch('/api/sendOrder',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  const json=await resp.json().catch(()=>({}));
+  if(resp.ok&&json.ok){
+    alert("Заказ отправлен!");
+    for(const k in cart) delete cart[k];
+    save();
+    updateCartUI();
+    showCatalog();
+  } else {
+    alert("Ошибка при отправке заказа");
   }
 }
 </script>
